@@ -395,3 +395,65 @@ fallback match is visible in the diff preview rather than silent.
 **Verified:** `productGroupCode` needs no new table — the generic `erp_sync_map` with
 `entity_type = 'category'` covers it. `whCode` did require adding `warehouse` to the
 `entity_type` enum.
+
+---
+
+## D-19 — RLS is enabled but not forced
+
+**Date:** 2026-08-10 · **Status:** Accepted · **Phase:** 0
+**Amends:** PLAN.md rev 1 §10, which said `FORCE ROW LEVEL SECURITY` on every table
+
+**Context.** `FORCE ROW LEVEL SECURITY` makes policies apply to the table owner as well as
+to ordinary roles. That sounds strictly safer, and it is what rev 1 of the plan specified.
+
+**Decision.** Every table gets `ENABLE ROW LEVEL SECURITY`. None get `FORCE`.
+
+**Reasoning.** The whole write model depends on `SECURITY DEFINER` routines reading and
+writing past the policies they exist to implement:
+
+- `post_document()` inserts into `stock_movements`, which by design has **no** INSERT
+  policy at all (D-06). Under FORCE, the only writer to the ledger could not write.
+- `has_perm()` reads `user_profiles`. Under FORCE, the policy on `user_profiles` — which
+  is written in terms of `has_perm()` — would recurse into itself.
+- `audit_trigger()` inserts into `audit_log`, which is deliberately not writable by
+  `authenticated`.
+
+FORCE would not add protection here, because it only constrains the table owner, and the
+owner is `postgres` — reachable solely through these audited functions or through a
+service-role connection that never leaves the server. What actually protects the data is
+unchanged: `anon` has no grants at all, `authenticated` gets only what the policies allow,
+and the ledger's INSERT privilege is revoked from `authenticated` outright.
+
+**Consequences.** A future `SECURITY DEFINER` function is implicitly trusted, so each one
+must check permissions itself with `require_perm()` — `post_document()` does this on its
+first line. If a later phase adds a definer function that skips that check, it becomes a
+privilege-escalation hole with nothing behind it. Worth a review checklist item.
+
+---
+
+## D-20 — The QC role can post its own write-offs
+
+**Date:** 2026-08-10 · **Status:** Accepted · **Phase:** 0
+**Amends:** D-14
+
+**Context.** Found by a test, not by reading. `qc` was seeded with `lot.dispose_unpassed`
+and `adjustment.create` but not `adjustment.post`, so the scrap-a-failed-lot test failed
+with `permission denied: adjustment.post is required`.
+
+**Decision.** `qc` also holds `adjustment.post`. It does **not** hold `adjustment.approve`.
+
+**Reasoning.** `qc` is the only role holding `lot.dispose_unpassed`. Without the ability to
+post its own write-off, a failed lot could be raised for scrapping and then never actually
+scrapped — the exact trap D-14 exists to remove, reintroduced one layer down in the
+permission seed. Withholding `adjustment.approve` keeps the two-person check: QC raises and
+posts the write-off, a manager approves it in between.
+
+**Consequences.** A write-off of unpassed stock needs two people. If that proves too slow
+in practice, granting `warehouse_manager` the `lot.dispose_unpassed` permission is a seed
+change, not a migration (D-09).
+
+**Note for the owner:** this interacts with a case worth deciding explicitly. A cycle-count
+variance that *decreases* a `pending_qc` lot is classified as disposal, so it also requires
+`lot.dispose_unpassed` — meaning a warehouse manager cannot post a count variance against
+stock that is still awaiting QC. That is arguably correct (removing unpassed stock from the
+record should involve QC) but it is a real operational constraint, not an accident.

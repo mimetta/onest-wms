@@ -21,6 +21,9 @@ dist/
 supabase/.temp/
 supabase/.branches/
 
+# Per-developer Claude Code permissions — machine-local, not project config
+.claude/settings.local.json
+
 # Test / tooling output
 coverage/
 *.tsbuildinfo

@@ -684,8 +684,11 @@ means two concurrent posts touching the same pair of bins cannot deadlock.
 | `viewer` | Read | No | No | No | No | No |
 
 ### RLS rules
-- `ALTER TABLE … ENABLE ROW LEVEL SECURITY` **and** `FORCE ROW LEVEL SECURITY` on every
-  table, including for the table owner.
+- `ALTER TABLE … ENABLE ROW LEVEL SECURITY` on every table. **Not `FORCE`** — see D-19.
+  Forcing RLS applies policies to the table owner too, which is precisely what
+  `post_document()`, `has_perm()` and `audit_trigger()` depend on *not* happening: they
+  are `SECURITY DEFINER` and must read past the policies they implement. Forcing it makes
+  `has_perm()` recurse into the policy that calls `has_perm()`.
 - Read policies scope to `warehouse_id = auth_warehouse()` and require `is_active`.
 - `stock_movements` has **no INSERT policy at all**. The only writer is `post_document()`,
   which is `SECURITY DEFINER` and therefore bypasses RLS by design — deliberately the sole
