@@ -457,3 +457,88 @@ variance that *decreases* a `pending_qc` lot is classified as disposal, so it al
 `lot.dispose_unpassed` — meaning a warehouse manager cannot post a count variance against
 stock that is still awaiting QC. That is arguably correct (removing unpassed stock from the
 record should involve QC) but it is a real operational constraint, not an accident.
+
+---
+
+## D-21 — Opening balances arrive as a goods receipt from the OPENING bin
+
+**Date:** 2026-08-10 · **Status:** Accepted · **Phase:** 0
+**Implements:** D-05
+
+**Context.** D-05 says opening stock enters from a virtual `OPENING` location so that day
+one has a real audit trail. Writing the seed exposed a gap: the sufficiency guard (D-13)
+checks on-hand at the source bin, and `OPENING` starts at zero — so posting the very first
+opening balance was refused for insufficient stock. The decision was recorded but not
+reachable.
+
+**Decision.** Two changes, both in migration 0012:
+
+1. `locations.allows_negative`, true only for `type = 'opening'`. `post_document()` skips
+   the sufficiency check for a source bin that carries it.
+2. `goods_receipt_lines.from_location_id` is now honoured by `document_posting_lines()`. A
+   normal supplier receipt leaves it null (stock enters from outside the company); an
+   opening-balance receipt sets it to `OPENING-WH01`.
+
+**Reasoning.** Refusing to let `OPENING` go negative is correct for a real bin and wrong for
+this one: it is a source of stock that predates the ledger, so its balance is *meant* to end
+up negative. That negative is not an anomaly to suppress — it equals the total stock that
+existed before the system did, which is a genuinely useful reconciliation figure.
+
+Routing opening balances through `goods_receipts` rather than inventing a ninth document
+type means go-live stock lands through exactly the same audited path, permission check and
+posting function as every later receipt. The seed demonstrates it: `OPENING-WH01` holds
+−17,792.63 and the real bins hold +17,792.63, which is the ledger proving itself.
+
+**Consequences.** `allows_negative` must never be set on a physical bin — that would silently
+disable the negative-stock guard there. It is set by trigger from the location type and is
+not exposed in the admin UI. The negative-stock alert must exclude virtual locations, or
+`OPENING` will raise a permanent critical alert.
+
+---
+
+## D-22 — Goods receipts post on scan completion, with no separate approver
+
+**Date:** 2026-08-10 · **Status:** Accepted — **assumption, flagged for confirmation** · **Phase:** 0
+
+**Context.** The approval chain answer arrived with the goods-receipt option left unresolved:
+"posts immediately after scanning / needs approval by warehouse manager" — both alternatives
+still present, neither chosen.
+
+**Decision.** Implemented as **posts immediately after scanning**. `warehouse_staff` holds
+`goods_receipt.approve` alongside `goods_receipt.create` and `.post`, so the receiving screen
+can carry a document from draft to posted in one action.
+
+**Reasoning.** The brief requires that "an entire receipt can be done with only a scanner and
+number keys." An external approval step breaks that outright: the receiver would scan, then
+stop and wait for a manager before stock exists in the system. Since ใบเบิก and ใบส่งสินค้า
+both got explicit approvers and the goods receipt did not, the scan-first requirement is the
+better guide.
+
+**Consequences.** Inbound stock has no second pair of eyes. The QC gate is what actually
+controls quality here — a receipt lands in `qc_hold` for any product with `requires_qc`, and
+that stock cannot be issued or delivered until QC passes it (D-14) — so the missing approval
+step costs less than it would on an outbound document.
+
+**To reverse:** delete one row from `role_permissions`
+(`warehouse_staff` / `goods_receipt.approve`). No migration, no code change.
+
+---
+
+## D-23 — Test fixtures carry a unique tag
+
+**Date:** 2026-08-10 · **Status:** Accepted · **Phase:** 0
+
+**Context.** Tests build their own fixture world and roll it back. Once `supabase/seed.sql`
+existed, every fixture collided with the demo data on unique codes — `WH01`, `PCS`, `FG-001`
+— and 19 tests failed at once.
+
+**Decision.** Every fixture-created code carries a per-call tag (`WH-X0ABC`, `PCS-X0ABC`).
+Fixture warehouses are never `is_default`. Assertions that read a document number check its
+format and that consecutive numbers increment, rather than pinning `…-00001`.
+
+**Reasoning.** Tests should fail when a constraint changes, not when the demo data does.
+Pinning `GR-2026-00001` made the suite depend on the seed posting nothing — a coupling that
+would break again the first time anyone added a document to the seed.
+
+**Consequences.** Fixture data accumulates in the local database across a run, but each test
+rolls back, so nothing persists. `supabase db reset` remains the way to get a clean slate.

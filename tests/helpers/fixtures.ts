@@ -3,25 +3,46 @@ import type { Db } from "./db";
 export type World = Awaited<ReturnType<typeof seedWorld>>;
 
 /**
+ * Every fixture code carries a unique tag. The demo seed in supabase/seed.sql
+ * already occupies the obvious codes (WH01, PCS, FG-001, ...), and tests run
+ * against a seeded database, so anything hard-coded would collide on a unique
+ * index. Tagging also keeps tests independent of what the seed happens to
+ * contain: they should fail when a constraint changes, not when the demo data
+ * does.
+ */
+let fixtureCounter = 0;
+const nextTag = () =>
+  `X${(fixtureCounter++).toString(36).toUpperCase()}${Math.floor(Math.random() * 1e6)
+    .toString(36)
+    .toUpperCase()}`;
+
+/**
  * A minimal but realistic warehouse: one of every location type that matters,
  * three products covering all three tracking modes, and one user per role.
- *
- * Deliberately hand-built rather than reusing supabase/seed.sql -- tests
- * should fail when a constraint changes, not when the demo data does.
  */
 export async function seedWorld(db: Db) {
+  const t = nextTag();
+
+  // is_default stays false: a partial unique index allows exactly one default
+  // warehouse, and the seeded WH01 already holds it.
   const wh = await db.value(
     `insert into warehouses (code, name_th, name_en, is_default)
-     values ('WH01', 'คลังสินค้าหลัก', 'Main Warehouse', true) returning id`,
+     values ($1, 'คลังทดสอบ', 'Test Warehouse', false) returning id`,
+    [`WH-${t}`],
   );
 
   const zone = await db.value(
-    `insert into zones (warehouse_id, code, name_th) values ($1, 'A', 'โซน A') returning id`,
-    [wh],
+    `insert into zones (warehouse_id, code, name_th) values ($1, $2, 'โซน A') returning id`,
+    [wh, `A-${t}`],
   );
 
-  const loc = async (code: string, type: string, partnerId?: string) =>
-    db.value(
+  // Codes are recorded alongside the ids: a couple of assertions read the
+  // human-facing location code back out of stock_movement_path.
+  const codes: Record<string, string> = {};
+  const loc = async (key: string, base: string, type: string, partnerId?: string) => {
+    const code = `${base}-${t}`;
+    codes[key] = code;
+    return db.value(
       `insert into locations (warehouse_id, zone_id, code, barcode, type, partner_id)
        values ($1, $2, $3, $3, $4, $5) returning id`,
       [
@@ -32,59 +53,66 @@ export async function seedWorld(db: Db) {
         partnerId ?? null,
       ],
     );
+  };
 
   const supplier = await db.value(
-    `insert into partners (code, type, name_th) values ('SUP01', 'supplier', 'ผู้ขาย ก') returning id`,
+    `insert into partners (code, type, name_th) values ($1, 'supplier', 'ผู้ขาย ก') returning id`,
+    [`SUP-${t}`],
   );
   const customer = await db.value(
-    `insert into partners (code, type, name_th) values ('CUS01', 'customer', 'ลูกค้า ข') returning id`,
+    `insert into partners (code, type, name_th) values ($1, 'customer', 'ลูกค้า ข') returning id`,
+    [`CUS-${t}`],
   );
 
   const locations = {
-    receiving: await loc("RECV-01", "receiving"),
-    qcHold: await loc("QC-HOLD-01", "qc_hold"),
-    storage: await loc("A-01-01", "storage"),
-    storage2: await loc("A-01-02", "storage"),
-    picking: await loc("PICK-01", "picking"),
-    staging: await loc("STAGE-01", "staging"),
-    shipping: await loc("SHIP-01", "shipping"),
-    quarantine: await loc("QUAR-01", "quarantine"),
-    scrap: await loc("SCRAP-01", "scrap"),
-    inTransit: await loc("IN-TRANSIT-WH01", "in_transit"),
-    opening: await loc("OPENING-WH01", "opening"),
-    consignment: await loc("CONS-CUS01", "consignment_site", customer),
+    receiving: await loc("receiving", "RECV", "receiving"),
+    qcHold: await loc("qcHold", "QC-HOLD", "qc_hold"),
+    storage: await loc("storage", "A-01-01", "storage"),
+    storage2: await loc("storage2", "A-01-02", "storage"),
+    picking: await loc("picking", "PICK", "picking"),
+    staging: await loc("staging", "STAGE", "staging"),
+    shipping: await loc("shipping", "SHIP", "shipping"),
+    quarantine: await loc("quarantine", "QUAR", "quarantine"),
+    scrap: await loc("scrap", "SCRAP", "scrap"),
+    inTransit: await loc("inTransit", "IN-TRANSIT", "in_transit"),
+    opening: await loc("opening", "OPENING", "opening"),
+    consignment: await loc("consignment", "CONS", "consignment_site", customer),
   };
 
   const uomPcs = await db.value(
     `insert into uoms (code, name_th, name_en, decimal_places)
-     values ('PCS', 'ชิ้น', 'Pieces', 0) returning id`,
+     values ($1, 'ชิ้น', 'Pieces', 0) returning id`,
+    [`PCS-${t}`],
   );
   const uomKg = await db.value(
-    `insert into uoms (code, name_th, name_en) values ('KG', 'กิโลกรัม', 'Kilogram') returning id`,
+    `insert into uoms (code, name_th, name_en) values ($1, 'กิโลกรัม', 'Kilogram') returning id`,
+    [`KG-${t}`],
   );
   const uomDrum = await db.value(
-    `insert into uoms (code, name_th, name_en) values ('DRUM', 'ถัง', 'Drum') returning id`,
+    `insert into uoms (code, name_th, name_en) values ($1, 'ถัง', 'Drum') returning id`,
+    [`DRUM-${t}`],
   );
 
   const dept = await db.value(
-    `insert into departments (code, name_th, name_en) values ('PROD', 'ฝ่ายผลิต', 'Production') returning id`,
+    `insert into departments (code, name_th, name_en) values ($1, 'ฝ่ายผลิต', 'Production') returning id`,
+    [`PROD-${t}`],
   );
 
   // Three products, one per tracking mode.
   const untracked = await db.value(
     `insert into products (sku, name_th, base_uom_id, tracking_mode)
-     values ('FG-001', 'สินค้าสำเร็จรูป 1', $1, 'none') returning id`,
-    [uomPcs],
+     values ($2, 'สินค้าสำเร็จรูป 1', $1, 'none') returning id`,
+    [uomPcs, `FG-${t}`],
   );
   const lotTracked = await db.value(
     `insert into products (sku, name_th, base_uom_id, tracking_mode, requires_qc, shelf_life_days)
-     values ('RM-SOLV-01', 'ตัวทำละลาย', $1, 'lot', true, 365) returning id`,
-    [uomKg],
+     values ($2, 'ตัวทำละลาย', $1, 'lot', true, 365) returning id`,
+    [uomKg, `RM-SOLV-${t}`],
   );
   const serialTracked = await db.value(
     `insert into products (sku, name_th, base_uom_id, tracking_mode)
-     values ('EQ-PUMP-01', 'ปั๊มจ่ายสาร', $1, 'serial') returning id`,
-    [uomPcs],
+     values ($2, 'ปั๊มจ่ายสาร', $1, 'serial') returning id`,
+    [uomPcs, `EQ-PUMP-${t}`],
   );
 
   // A drum of solvent is 200 kg. Per product, because it is density, not a
@@ -108,7 +136,7 @@ export async function seedWorld(db: Db) {
        values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000',
                'authenticated', 'authenticated', $1)
        returning id`,
-      [`${key}@onest.test`],
+      [`${key}-${t}@onest.test`],
     );
     await db.query(
       `insert into user_profiles (id, full_name, role, warehouse_id)
@@ -120,17 +148,21 @@ export async function seedWorld(db: Db) {
 
   const reasonDisposal = await db.value(
     `insert into adjustment_reasons (code, name_th, direction, is_disposal)
-     values ('WRITE_OFF', 'ตัดจำหน่าย', 'decrease', true) returning id`,
+     values ($1, 'ตัดจำหน่าย', 'decrease', true) returning id`,
+    [`WRITE_OFF-${t}`],
   );
   const reasonFound = await db.value(
     `insert into adjustment_reasons (code, name_th, direction, is_disposal)
-     values ('FOUND', 'พบสินค้าเพิ่ม', 'increase', false) returning id`,
+     values ($1, 'พบสินค้าเพิ่ม', 'increase', false) returning id`,
+    [`FOUND-${t}`],
   );
 
   return {
+    tag: t,
     wh,
     zone,
     locations,
+    codes,
     partners: { supplier, customer },
     uoms: { pcs: uomPcs, kg: uomKg, drum: uomDrum },
     dept,

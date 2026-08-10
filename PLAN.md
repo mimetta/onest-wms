@@ -831,18 +831,23 @@ These go into `DECISIONS.md` with their reasoning.
 | 3 | Local tooling | **Approved.** `gh` 2.97.0 and Supabase CLI 2.113.0 installed. Docker Desktop is blocked on a password prompt — see §17. |
 | 7 | Opening balances | **Approach approved** — posted as real movements from the virtual `OPENING` location. Go-live date still outstanding. |
 
-### Still blocking — migrations can be written, seed and provisioning cannot complete
+### Answered 2026-08-10 (second round) — all implemented
 
-| # | Question | Blocks |
+| # | Question | Answer |
 |---|---|---|
-| 2 | **GitHub remote** — confirm the exact owner/repo. `github.com/mimetta/onest-wms` was offered as an example, not confirmed. The local repo still has no remote. | `git push`, CI setup |
-| 4 | **Approval chain** — who signs an ใบเบิก and an ใบส่งสินค้า, one approval or two, and does a goods receipt post on scan completion or need approval? | `role_permissions` seed, document status workflow config |
-| 5 | **Departments** — the list of departments/cost centres that raise ใบขอเบิก. | `departments` seed; `requisitions.department_id` is `NOT NULL`, so the demo seed cannot be written without at least a provisional list |
-| 6 | **Consignment sites** — how many customer sites, one location each or several bins? | `locations` seed |
-| 7b | **Go-live date** — the date opening balances are posted as of. | Opening-balance seed |
+| 2 | GitHub remote | `github.com/mimetta/onest-wms`. Remote configured. |
+| 4 | Approval chain | ใบเบิก approved by **warehouse_manager**; ใบส่งสินค้า approved by **warehouse_staff**. Goods receipt: answer arrived unresolved — implemented as post-on-scan, see D-22. |
+| 5 | Departments | Production, QC/QA, Warehouse, Retail, Procurement, Accounting, Marketing. Seeded. |
+| 6 | Consignment sites | Customer sites, one location each. Two seeded as a demonstration; the count is still unstated and the pattern extends without a schema change. |
+| 7b | Go-live date | **31 Aug 2026**, stored in `settings.go_live_date`. |
+| — | QC interpretation (D-14) | Confirmed as implemented. Internal moves of unpassed lots open to all roles; disposal restricted to qc/admin. `lot.move_unpassed` deliberately not added. |
 
-None of these change the schema. They are all seed and configuration values, so §3–§9 can
-be implemented now and the seed finished when the answers arrive.
+### Still open
+
+| Item | Impact |
+|---|---|
+| **Goods receipt approval** — the answer contained both options and picked neither. Implemented as post-on-scan (D-22), because the brief requires a receipt completable with only a scanner. Reversing it is one `role_permissions` row. | Low — reversible without a migration |
+| **Number of consignment sites** — the structure was answered ("one location each"), the count was not. Two are seeded. | Low — seed only |
 
 ### Needed by the end of Phase 1
 

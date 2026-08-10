@@ -431,12 +431,15 @@ describe("document workflow and numbering", () => {
         numbers.push(await db.post("adjustment", adj));
       }
 
+      // Assert the numbers are consecutive rather than pinning them to a
+      // starting value, so the test does not depend on what the seed consumed.
       const year = new Date().getFullYear();
-      expect(numbers).toEqual([
-        `AJ-${year}-00001`,
-        `AJ-${year}-00002`,
-        `AJ-${year}-00003`,
-      ]);
+      for (const n of numbers) {
+        expect(n).toMatch(new RegExp(`^AJ-${year}-\\d{5}$`));
+      }
+      const counters = numbers.map((n) => Number(n.slice(-5)));
+      expect(counters[1]).toBe(counters[0] + 1);
+      expect(counters[2]).toBe(counters[1] + 1);
     });
   });
 
@@ -557,7 +560,9 @@ describe("the whole loop", () => {
         [gr, p, lot, w.uoms.drum, w.locations.qcHold],
       );
       const grNo = await db.post("goods_receipt", gr);
-      expect(grNo).toMatch(/^GR-\d{4}-00001$/);
+      // Format only, not the counter: the demo seed has already posted its
+      // opening-balance receipt, so GR-…-00001 is taken.
+      expect(grNo).toMatch(/^GR-\d{4}-\d{5}$/);
       expect(await db.onHand(p, w.locations.qcHold, lot)).toBe(400);
 
       // 2. QC passes the lot.
@@ -611,10 +616,10 @@ describe("the whole loop", () => {
         [lot],
       );
       expect(path).toEqual([
-        { from_location_code: null, to_location_code: "QC-HOLD-01" },
-        { from_location_code: "QC-HOLD-01", to_location_code: "IN-TRANSIT-WH01" },
-        { from_location_code: "IN-TRANSIT-WH01", to_location_code: "PICK-01" },
-        { from_location_code: "PICK-01", to_location_code: null },
+        { from_location_code: null, to_location_code: w.codes.qcHold },
+        { from_location_code: w.codes.qcHold, to_location_code: w.codes.inTransit },
+        { from_location_code: w.codes.inTransit, to_location_code: w.codes.picking },
+        { from_location_code: w.codes.picking, to_location_code: null },
       ]);
     });
   });
