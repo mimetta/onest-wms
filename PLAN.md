@@ -1,8 +1,14 @@
 # Onest WMS — Phase 0 Plan & Schema
 
-> **Status:** Proposal — awaiting approval. No migrations written yet.
-> **Prepared:** 2026-08-10
+> **Status:** **Approved with corrections, 2026-08-10.** Corrections incorporated below.
+> **Prepared:** 2026-08-10 · **Revised:** 2026-08-10 (rev 2)
 > **Scope:** 1 warehouse, <500 SKUs, plus consignment customer sites.
+>
+> **Rev 2 changes:** posting semantics rewritten (§9) — the negative check now reads
+> on-hand at the specific source bin, and the QC gate is applied per movement class rather
+> than through `stock_available`; `department_id` added to requisition and issue headers
+> (§6); AccCloud `getProductRemain` API recorded and its schema implications applied
+> (§7, §18). See `DECISIONS.md` for the reasoning behind each.
 
 This document is the specification for Phase 0. It covers what Phase 0 delivers, the
 complete proposed database schema, the invariants the database enforces on its own, the
@@ -32,7 +38,8 @@ stock. The guarantees live in Postgres, not in React.
 14. [Tests in Phase 0](#14-tests-in-phase-0)
 15. [Decisions recorded](#15-decisions-recorded)
 16. [Open questions](#16-open-questions)
-17. [Known environment gaps](#17-known-environment-gaps)
+17. [Environment & provisioning](#17-environment--provisioning)
+18. [AccCloud API](#18-acccloud-api--recorded-implemented-in-phase-4)
 
 ---
 
@@ -64,11 +71,17 @@ on_hand(product, lot, location)
   = Σ movements WHERE to_location   = location
   − Σ movements WHERE from_location = location
 
-available(product, lot, location)          -- what picking is allowed to see
+available(product, lot, location)          -- what picking is allowed to SUGGEST
   = on_hand
     AND location.counts_as_available        -- excludes qc_hold, quarantine, scrap, in_transit
-    AND (lot IS NULL OR lot.qc_status = 'passed')   -- the QC gate, in the database
+    AND (lot IS NULL OR lot.qc_status = 'passed')   -- the QC gate
 ```
+
+> **`stock_available` is an advisory view, not the posting guard.** It answers "what should
+> the pick screen offer?" It is deliberately *not* what `post_document()` checks — see §9
+> and D-13. Posting checks on-hand at the exact source bin, because stock that is
+> legitimately sitting in a non-available location (staging awaiting despatch, a consignment
+> site awaiting settlement, a failed lot awaiting scrap) must still be movable.
 
 Enforced by a `BEFORE UPDATE OR DELETE` trigger on `stock_movements` that raises
 unconditionally, plus `REVOKE UPDATE, DELETE ON stock_movements FROM PUBLIC, anon,
@@ -265,7 +278,8 @@ references user_profiles(id)`. Omitted below for brevity.
 | `shelf_life_days` | integer, nullable | Used to default lot expiry at receiving |
 | `requires_qc` | boolean | If true, receipts land in `qc_hold` and lots start `pending_qc` |
 | `is_consignment_eligible` | boolean | |
-| `acccloud_item_code` | text, unique nullable | Sync key — the match key for idempotent import |
+| `acccloud_item_code` | text, unique nullable | Maps to AccCloud `prodCode`. The match key for idempotent CSV import. |
+| `acccloud_master_id` | numeric, unique nullable | Maps to AccCloud `masterId` — their stable internal ID. Survives a `prodCode` rename, so it is the *preferred* match key when present, with `prodCode` as fallback. |
 | `is_active` | boolean | |
 
 **Immutability rule:** `tracking_mode` cannot be changed once any movement exists for the
@@ -406,6 +420,23 @@ All eight document types share one shape.
 `approved_by`/`approved_at`, `posted_by`/`posted_at`, `cancelled_by`/`cancelled_at`,
 `cancel_reason`.
 
+**Type-specific header columns:**
+
+| Table | Extra columns |
+|---|---|
+| `requisitions` | `department_id` uuid FK → `departments`, **not null** — who is asking |
+| `issues` | `department_id` uuid FK → `departments`, **not null**; `requisition_id` FK nullable |
+| `goods_receipts` | `partner_id` (supplier), `po_reference` text nullable, `supplier_do_no` |
+| `delivery_notes` | `partner_id` (customer), `so_reference`, `is_consignment` boolean |
+| `consignment_settlements` | `partner_id`, `location_id` (the consignment site), `period_from`/`period_to` |
+| `transfers` | `from_warehouse_id`, `to_warehouse_id`, `dispatched_by`/`dispatched_at` |
+| `adjustments` | `reason_code_id` FK **not null**, `source_cycle_count_id` nullable |
+| `cycle_counts` | `mode`, `scope`, `zone_id` nullable |
+
+`issues.department_id` is carried on the issue itself rather than being read through the
+requisition, because an issue can be raised directly without one — and because a
+department's stock consumption report must not depend on a nullable join.
+
 **Status workflow:** `draft → submitted → approved → posted → cancelled`
 
 - `cancelled` is reachable from `draft`, `submitted`, `approved` — but **not** from
@@ -432,9 +463,16 @@ All eight document types share one shape.
 | `cycle_counts` | ใบตรวจนับ | `CC` | — | Posts no movements itself; generates an `adjustment` for the variance |
 
 ### `adjustment_reasons`
-`code`, `name_th`, `name_en`, `direction` (`increase \| decrease \| both`), `is_active`.
+`code`, `name_th`, `name_en`, `direction` (`increase | decrease | both`), `is_disposal`
+boolean, `is_active`.
+
 Seeded with: damage, spillage, evaporation loss, count variance, sample taken, expired
-write-off, found stock, system correction.
+write-off, found stock, system correction, return to supplier.
+
+`is_disposal` marks the reasons that legitimately remove non-passed stock from the building
+— write-off, damage, scrap, return to supplier. It is what §9.3 keys the disposal class
+off, so the QC exemption is driven by *why* stock is leaving rather than by a hard-coded
+list of reason codes.
 
 ### `cycle_counts` specifics
 - `mode`: `blind | informed` — blind mode does not send expected quantities to the client
@@ -469,9 +507,14 @@ ledger.
   column reserved so LINE Notify / email delivery can be added without a migration.
 
 ### ERP sync (AccCloud → WMS, inbound only)
-- `erp_sync_map`: `entity_type` (`product | partner | uom | category`), `wms_id`,
-  `external_system` (`acccloud`), `external_code`. Unique on
-  `(external_system, entity_type, external_code)` — this is what makes import idempotent.
+- `erp_sync_map`: `entity_type` (`product | partner | uom | category | warehouse`),
+  `wms_id`, `external_system` (`acccloud`), `external_code`, `external_name` (last-seen
+  label, for diff display). Unique on `(external_system, entity_type, external_code)` —
+  this is what makes import idempotent.
+  - `category` rows map AccCloud `productGroupCode` → `product_categories.id`. **Confirmed:
+    the generic map covers this with no schema change.**
+  - `warehouse` was added in rev 2: `getProductRemain` returns `whCode`, so reconciliation
+    needs a code→warehouse mapping even though we run a single warehouse today.
 - `erp_import_batches`: `source` (`csv | api`), `filename`, `file_hash`, `uploaded_by`,
   `status` (`uploaded | validated | committed | failed`), `stats jsonb` (new / changed /
   unchanged / error counts), `column_mapping jsonb`.
@@ -514,6 +557,67 @@ reverse — a materialised view can replace a plain one behind the same name.
 
 One function writes to the ledger. Every document type calls it.
 
+### 9.1 Two separate guards, not one
+
+The first draft of this plan conflated two unrelated questions into a single
+`stock_available` lookup. They are now separated, because merging them made four legitimate
+operations impossible:
+
+| Guard | Question it answers | Reads |
+|---|---|---|
+| **Sufficiency** | Is there enough physical stock *in this exact bin* to move out of it? | `stock_on_hand` at the specific `from_location_id` |
+| **QC gate** | Is this lot allowed to be consumed or handed to a customer? | `lots.qc_status`, applied per movement class |
+
+**What the old design broke** — every one of these sources from a location where
+`counts_as_available = false`, so `stock_available` reported zero and the post was refused:
+
+- scrapping or writing off a failed lot (source: `qc_hold` / `quarantine`)
+- settling consignment stock (source: `consignment_site`)
+- shipping a delivery note (source: `staging` / `shipping`)
+- confirming the receive leg of a transfer (source: `in_transit`)
+
+### 9.2 Sufficiency guard
+
+For each line, on-hand is read for the exact `(product, lot, serial, from_location)` tuple
+from `stock_on_hand` — never from `stock_available`, and never rolled up across bins. Stock
+in bin A cannot satisfy a movement out of bin B. Lines with `from_location_id IS NULL`
+(external inbound) skip this guard entirely.
+
+`counts_as_available` therefore has exactly one job: driving pick suggestions, dashboards
+and line-entry validation in the UI. It is not a posting control.
+
+### 9.3 QC gate, by movement class
+
+Each movement is classified from its document type and its endpoints:
+
+| Class | Matches | QC rule |
+|---|---|---|
+| **Inbound** | `from_location_id IS NULL` | None. Receiving is how lots enter `pending_qc` in the first place. |
+| **Internal** | both endpoints are internal locations | **None.** Putaway out of `qc_hold`, moves to `quarantine` or `scrap`, transfers, putaway — all unrestricted. Safe by construction: `stock_available` gates on lot status *at every location*, so relocating a non-passed lot cannot leak it into the available pool. |
+| **Consumption** | document type ∈ {`issues`, `delivery_notes`, `consignment_settlements`} and stock leaves our control (`to_location_id IS NULL` or `to_location.type = 'consignment_site'`) | **`lot.qc_status = 'passed'` required.** Hard failure, no override. |
+| **Disposal** | document type = `adjustments` with a reason flagged `is_disposal`, or a return-to-supplier | Non-passed lots permitted, but the caller must hold permission `lot.dispose_unpassed` — seeded to `qc` and `admin`. |
+
+Two supporting rules:
+
+- **Untracked products** (`tracking_mode = 'none'`) have no lot and therefore no QC status.
+  They are guarded by location instead: a consumption-class movement may not source from a
+  location whose type is `qc_hold`, `quarantine` or `scrap`.
+- **Transfers are internal**, including the `consignment_site` leg of a delivery *movement
+  of goods*. It is the `delivery_notes` **document type** that makes a movement into a
+  consignment site consumption-class, not the destination alone.
+
+> **Interpretation flagged for confirmation.** The correction said QC-controlled moves
+> "must be allowed for qc/admin roles". I have read that as *permitting* them rather than
+> *restricting* them: internal relocations of a non-passed lot are open to any role holding
+> the document's post permission, because they change nothing about that lot's
+> availability. Only **disposal** — stock leaving the building while not passed — is
+> narrowed to `qc`/`admin`. If you intended putaway out of `qc_hold` to be qc/admin-only
+> too, say so and I'll move `internal` moves of non-passed lots behind
+> `lot.move_unpassed`. Since permissions are rows in `role_permissions` (D-09), this is a
+> seed change, not a migration.
+
+### 9.4 Algorithm
+
 ```
 post_document(p_doc_type, p_doc_id, p_override_negative boolean default false,
               p_override_reason text default null)
@@ -522,29 +626,35 @@ post_document(p_doc_type, p_doc_id, p_override_negative boolean default false,
 1.  Assert caller has permission `<doc_type>.post`.
 2.  SELECT the header FOR UPDATE. Assert status = 'approved'
     (or 'dispatched' for the transfer receive leg).
-3.  For each line, in a deterministic order (product_id, location_id) to avoid deadlock:
-      a. pg_advisory_xact_lock(hashtext(product_id || '/' || from_location_id))
-      b. Read available qty from stock_available for that product/lot/bin.
-      c. If insufficient:
-           - if NOT allow_negative_stock AND NOT p_override_negative -> RAISE
-           - if override: assert caller role in negative_stock_override_roles,
-             assert p_override_reason is not null, log action='override' to audit_log
-      d. Assert tracking discipline (lot/serial present as required).
-      e. Assert QC gate: lot.qc_status = 'passed' for any outbound line.
-      f. INSERT the movement row(s).
-4.  Assign doc_no from document_sequences if not already assigned (row lock).
-5.  UPDATE header SET status='posted', posted_by=auth.uid(), posted_at=now().
-6.  INSERT audit_log row with the full before/after.
+3.  Build the line set, sorted by (product_id, from_location_id, lot_id)
+    -- deterministic order, so concurrent posts cannot deadlock.
+4.  For each line:
+      a. Assert tracking discipline (lot/serial present exactly as the
+         product's tracking_mode requires; serial lines have qty = 1).
+      b. Classify the movement (§9.3) and apply the QC gate for that class.
+      c. If from_location_id IS NOT NULL:
+           pg_advisory_xact_lock(hashtext(product_id || '/' || from_location_id))
+           on_hand := stock_on_hand for (product, lot, serial, from_location)
+           IF on_hand < qty THEN
+             IF NOT allow_negative_stock AND NOT p_override_negative -> RAISE
+             ELSE assert caller role in negative_stock_override_roles,
+                  assert p_override_reason IS NOT NULL,
+                  log action='override' to audit_log
+           END IF
+      d. If serial_id IS NOT NULL: assert the serial's derived current location
+         equals from_location_id (a serial exists in one place only).
+      e. INSERT the movement row.
+5.  Assign doc_no from document_sequences if not already assigned (row lock).
+6.  UPDATE header SET status='posted', posted_by=auth.uid(), posted_at=now().
+7.  INSERT audit_log row with the full before/after.
 
 All of the above is one transaction. It either all lands or none of it does.
 ```
 
-**Deadlock avoidance:** advisory locks are taken in a sorted order across the whole
-document, so two concurrent posts touching the same two bins can't deadlock.
-
 **Why advisory locks rather than `SELECT … FOR UPDATE`:** there is no row to lock — on-hand
 is derived, not stored. The lock is on the *concept* of a product-at-a-bin, which is
-exactly what an advisory lock is for.
+exactly what an advisory lock is for. Taking them in sorted order across the whole document
+means two concurrent posts touching the same pair of bins cannot deadlock.
 
 ---
 
@@ -655,6 +765,22 @@ Phase 0 has no UI to test, so the tests are SQL-level and unit-level:
   qty ≠ 1 raises
 - Negative stock: blocked by default; permitted with override by an authorised role with a
   reason; recorded in `audit_log` as an override
+- **Sufficiency is per-bin:** 10 units in `A-01-01` do not satisfy an issue from `A-01-02`
+- **Scrapping a failed lot** — an adjustment with an `is_disposal` reason posts successfully
+  from `qc_hold` against a lot with `qc_status = 'failed'`, when the caller holds
+  `lot.dispose_unpassed`; and is refused when they do not
+- **Settling consignment stock** — a consignment settlement consumes from a
+  `consignment_site` location (`counts_as_available = false`) and posts successfully
+- **Shipping from staging** — a delivery note posts from a `staging` location
+  (`counts_as_available = false`) and succeeds
+- **Transfer receive leg** — posts out of `in_transit`, which is likewise not "available"
+- **Consumption QC gate holds** — an issue against a `pending_qc` lot is refused, and no
+  role or override can force it
+- **Untracked-product location guard** — an issue sourcing from `quarantine` is refused for
+  a product with `tracking_mode = 'none'`
+- **Internal move is unrestricted** — putaway of a `pending_qc` lot from `qc_hold` to
+  `storage` succeeds for `warehouse_staff`, and the lot remains absent from
+  `stock_available` afterwards
 - Concurrency: two simultaneous posts against the same bin with only enough stock for one —
   exactly one succeeds
 - Document numbering: no gaps, no collisions under concurrent posting
@@ -683,31 +809,37 @@ These go into `DECISIONS.md` with their reasoning.
 | D-10 | UOM conversions are per product, because drum→kg depends on the product's density. |
 | D-11 | Views start plain, not materialised. Correctness first; optimise when volume justifies it. |
 | D-12 | `tracking_mode` is immutable once a product has movements. |
+| D-13 | Posting checks on-hand at the exact source bin, not `stock_available`. `counts_as_available` drives suggestions and dashboards only. |
+| D-14 | The QC gate is applied per movement class — consumption is hard-blocked, disposal is permission-gated, internal relocation is unrestricted. |
+| D-15 | `department_id` is stored on both requisitions and issues rather than joined through. |
+| D-16 | `movement.warehouse_id` semantics for inter-warehouse transfers are deferred. |
+| D-17 | AccCloud integration is CSV-first for item master; the API is for reconciliation only. |
+| D-18 | `acccloud_master_id` is the preferred sync key, `prodCode` the fallback. |
 
 ---
 
 ## 16. Open questions
 
-### Blocking — needed before migrations are written
+### Answered 2026-08-10
 
-1. **Supabase project** — new or existing? Project ref and region (Singapore is closest to
-   Bangkok). How do you want to hand over the keys? They go in `.env.local`, gitignored
-   from commit one.
-2. **GitHub remote** — does `onest-wms` exist on GitHub, under which account or org? The
-   local repo has one commit and no remote. `gh` is not installed here, so either I use a
-   plain remote URL or you install it.
-3. **Local tooling** — neither the Supabase CLI nor Docker is installed on this machine.
-   Docker is what makes `supabase db reset` work locally. May I install both via Homebrew,
-   or do you want to develop against the hosted database only?
-4. **Approval chain** — who signs an ใบเบิก, and is it one approval or two? Same for
-   ใบส่งสินค้า. Does a goods receipt need approval, or does it post as soon as the receiver
-   finishes scanning? Names and titles are enough; I'll turn them into roles.
-5. **Departments** — the list of departments or cost centres that raise ใบขอเบิก
-   (production, maintenance, QC lab, …). Becomes a seeded lookup table.
-6. **Consignment sites** — how many customer sites hold your stock, and does each need one
-   location or several bins? Assuming one location per site unless told otherwise.
-7. **Opening balances** — confirm the approach (posted as real movements from a virtual
-   `OPENING` location) and the intended go-live date.
+| # | Question | Answer |
+|---|---|---|
+| 1 | Supabase project | **New project, region Singapore (`ap-southeast-1`).** Keys to be placed in `.env.local` by the owner — see §17.1 for exactly which values and where to find them. |
+| 3 | Local tooling | **Approved.** `gh` 2.97.0 and Supabase CLI 2.113.0 installed. Docker Desktop is blocked on a password prompt — see §17. |
+| 7 | Opening balances | **Approach approved** — posted as real movements from the virtual `OPENING` location. Go-live date still outstanding. |
+
+### Still blocking — migrations can be written, seed and provisioning cannot complete
+
+| # | Question | Blocks |
+|---|---|---|
+| 2 | **GitHub remote** — confirm the exact owner/repo. `github.com/mimetta/onest-wms` was offered as an example, not confirmed. The local repo still has no remote. | `git push`, CI setup |
+| 4 | **Approval chain** — who signs an ใบเบิก and an ใบส่งสินค้า, one approval or two, and does a goods receipt post on scan completion or need approval? | `role_permissions` seed, document status workflow config |
+| 5 | **Departments** — the list of departments/cost centres that raise ใบขอเบิก. | `departments` seed; `requisitions.department_id` is `NOT NULL`, so the demo seed cannot be written without at least a provisional list |
+| 6 | **Consignment sites** — how many customer sites, one location each or several bins? | `locations` seed |
+| 7b | **Go-live date** — the date opening balances are posted as of. | Opening-balance seed |
+
+None of these change the schema. They are all seed and configuration values, so §3–§9 can
+be implemented now and the seed finished when the answers arrive.
 
 ### Needed by the end of Phase 1
 
@@ -730,11 +862,114 @@ These go into `DECISIONS.md` with their reasoning.
 
 ---
 
-## 17. Known environment gaps
+## 17. Environment & provisioning
 
-Present: Node 26, npm 11. Missing: `supabase`, `docker`, `gh`.
+Installed: Node 26, npm 11, `gh` 2.97.0, `supabase` 2.113.0.
 
-Without Docker there is no local database, which means the requirement that every migration
-be re-runnable from zero can only be verified against the hosted project — slower, and
-riskier once there is real data. **Recommendation:** install Docker Desktop and the Supabase
-CLI via Homebrew before Phase 0 coding starts. See question 3.
+**Docker Desktop is not installed.** The Homebrew cask downloaded and staged correctly, then
+failed at the final step: it needs `sudo` to create `/usr/local/bin`, and a background
+process cannot answer a password prompt. It rolled itself back cleanly — nothing is
+half-installed.
+
+**To finish it, run this yourself** (the `!` prefix runs it in this session, so the password
+prompt reaches you):
+
+```
+! brew install --cask docker-desktop
+```
+
+Then launch Docker Desktop once so it completes first-run setup. Until that is done there is
+no local database, and `supabase db reset` — the acceptance test for every migration — can
+only run against the hosted project.
+
+### 17.1 Environment variables
+
+`.env.local` is gitignored and is never committed. `.env.example` documents the same keys
+with empty values and *is* committed.
+
+| Variable | Where to find it | Notes |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase dashboard → **Project Settings → Data API → Project URL** | Looks like `https://<ref>.supabase.co`. Public — reaches the browser. |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Same page → **Project API keys → `anon` `public`** | Public by design; RLS is what protects the data behind it. |
+| `SUPABASE_SERVICE_ROLE_KEY` | Same page → **`service_role` `secret`** (click reveal) | **Server-only.** Bypasses RLS entirely. Never prefix with `NEXT_PUBLIC_`, never import into a client component. |
+| `SUPABASE_DB_URL` | **Project Settings → Database → Connection string → URI** | Contains the database password you set at project creation. Used by the CLI for migrations. |
+| `SUPABASE_PROJECT_REF` | The `<ref>` in the project URL, or Project Settings → General | For `supabase link`. |
+| `ACCCLOUD_API_BASE_URL` | — | `https://acccloud.me/api` |
+| `ACCCLOUD_COMPANY_CODE` | — | `MMT2025`. Confirmed. In env, never in code. |
+| `ACCCLOUD_API_TOKEN` | Pending — AccCloud auth method unknown | Placeholder; named generically so the adapter can switch scheme without a rename. |
+| `TZ` | — | `Asia/Bangkok` |
+| `NEXT_PUBLIC_DEFAULT_LOCALE` | — | `th` |
+
+When creating the project, set the region to **Southeast Asia (Singapore) `ap-southeast-1`**
+and save the database password somewhere durable — Supabase shows it once.
+
+---
+
+## 18. AccCloud API — recorded, implemented in Phase 4
+
+Recorded now so the Phase 0 schema is verified compatible. **No API code ships in Phase 0.**
+
+### The one known endpoint
+
+```
+POST https://acccloud.me/api/support/Product/getProductRemain
+```
+
+**Request (JSON body)**
+
+| Field | Required | Notes |
+|---|---|---|
+| `companyCode` | yes | Uppercase. Ours is `MMT2025`. |
+| `prodCode`, `prodName`, `whCode`, `productGroupCode` | no | Filters |
+| `searchAll` | no | `'N'` limits results, index capped at 1000 |
+
+**Response** — array of `{ masterId (decimal), prodCode, «product name», balance (decimal),
+warehouse, whCode, productGroup, productGroupCode }`.
+
+### What this endpoint is and is not
+
+It returns **quantity on hand per product per warehouse**. It carries no lot, no expiry, no
+serial, no unit of measure, no barcode, and no movement history. That makes it a
+**reconciliation source, not an item-master source** — which is why CSV import stays the
+primary path for item master and opening balances (D-17).
+
+### Schema implications — all verified against §3–§7
+
+| Implication | Status |
+|---|---|
+| `prodCode` → `products.acccloud_item_code` (text) | Already present |
+| `masterId` → `products.acccloud_master_id` (numeric, unique, nullable) | **Added in rev 2.** Preferred match key; `prodCode` is the fallback, since a code can be renamed but `masterId` should not (D-18) |
+| `productGroupCode` → `product_categories` via `erp_sync_map` with `entity_type = 'category'` | **Confirmed — the generic map covers it, no schema change needed** |
+| `whCode` → `warehouses` via `erp_sync_map` | **`warehouse` added to the `entity_type` enum in rev 2.** Needed even single-warehouse, so reconciliation can assert the balances belong to our warehouse |
+| Reconciliation runs are logged | `erp_sync_log` already covers this |
+
+**Conclusion: the Phase 0 schema does not conflict with this API.** Two additive changes
+(`acccloud_master_id`, `entity_type = 'warehouse'`) fold into the initial migrations.
+
+### Adapter requirements
+
+- **The response field name for the product name is ambiguous** — the spec table says
+  `prodTName`, the worked example says `productName`. The adapter must accept either and
+  fail loudly if neither is present, rather than silently importing blank names.
+- **Auth is unknown.** The adapter takes an injected auth strategy; `ACCCLOUD_API_TOKEN` is
+  a placeholder named to survive a scheme change. Not blocking.
+- **The 1000-row cap is a real ceiling.** Under 500 SKUs we are comfortably inside it, but
+  the adapter must page by `whCode` / `productGroupCode` and **raise if a response returns
+  exactly the cap**, rather than assuming completeness. A silently truncated reconciliation
+  that reports "no variances" is worse than one that fails.
+- Same `ErpAdapter` interface as the CSV importer, so both go through one code path.
+
+### Phase 4 reconciliation report
+
+Compares WMS `stock_by_product` against `getProductRemain` per `prodCode`, producing
+matched / WMS-only / AccCloud-only / quantity-variance rows. Read-only in both directions —
+it produces a report for a human, never an automatic correction. Every run writes to
+`erp_sync_log` with the row counts and total absolute variance.
+
+Because the endpoint has no lot dimension, comparison is at product+warehouse granularity;
+WMS lot detail is shown as supporting drill-down, not as part of the match.
+
+### Still pending from AccCloud — not blocking
+
+1. Authentication method
+2. Whether a full item-master endpoint exists (units, barcodes, categories)
