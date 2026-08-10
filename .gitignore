@@ -1,0 +1,35 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Real business data dropped in for reference (AccCloud exports, price lists, etc.)
+docs/samples/
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+.next/
+out/
+build/
+dist/
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+
+# Test / tooling output
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+.vercel/
+.turbo/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
