@@ -548,3 +548,63 @@ would break again the first time anyone added a document to the seed.
 
 **Consequences.** Fixture data accumulates in the local database across a run, but each test
 rolls back, so nothing persists. `supabase db reset` remains the way to get a clean slate.
+
+---
+
+## D-24 — AccCloud final API spec: two endpoints, no barcodes, WMS owns identity
+
+**Date:** 2026-08-11 · **Status:** Accepted (owner-supplied final spec) · **Phase:** 0 (recorded), Phase 4 (built)
+**Supersedes:** the provisional AccCloud spec in D-17 and PLAN.md rev 2 §18
+
+**Context.** Authentication and the real response schemas arrived. Two endpoints are now
+confirmed: `ProductMaster1/getByProd` (Get Product) and Get Product By Warehouse, alongside
+the previously known `getProductRemain`.
+
+**Decision.**
+
+- **Auth** is two headers, `x-api-key` (`gw_` prefix) and `x-secret-key` (`sk_` prefix),
+  with `companyCode` in the body. Both live in server-side env vars only. `status: "000"`
+  is the success value.
+- **Item-master sync needs both endpoints joined on `prodCode`** — Get Product supplies
+  codes and names, Get Product By Warehouse supplies unit and conversion factor.
+- **`prodTName` is the name we import.** `prodName` is a concatenated `code || name`
+  display string and is deliberately ignored.
+- **`productMaster1Id` → `acccloud_master_id`**, keeping the preference order set in D-18.
+- **Field names are matched verbatim, including the misspelled `differnce`.** Correcting
+  the spelling in our code would read `undefined` at runtime and silently report a zero
+  variance — worse than the typo.
+- CSV remains the primary bulk-load path (unchanged from D-17).
+
+**Reasoning — the consequence that matters most.** AccCloud returns **no barcode data at
+all**, from any endpoint. That settles an open question rather than creating a problem:
+`product_barcodes` is WMS-native, and barcode identity is ours to own. It also means the
+system cannot scan anything until we put barcodes on things, which promotes barcode capture
+from an assumed detail to explicit Phase 1 scope:
+
+1. Assign and print an internal barcode per SKU — already covered by the label-printing
+   screen.
+2. Capture supplier barcodes at first receiving: when a scan resolves to nothing, the
+   receiver is offered "link this barcode to a product" instead of a dead end. The
+   unknown-barcode error state becomes a capture opportunity.
+
+**Consequences.**
+
+- **Verified against the live schema on 2026-08-11: no migration required.** Every
+  confirmed field has a destination, and unmapped attributes (`weight`, `prodVat`,
+  `prodUniqueCode`, `accountCodeIncome`) are preserved verbatim in `erp_import_rows.raw`,
+  so nothing is discarded if they later become useful.
+- A Reset Key in AccCloud invalidates existing keys, so the adapter needs auth failure as
+  its own error state with a message naming the cause. A generic "sync failed" would send
+  someone into the wrong logs.
+
+**Two things to settle in Phase 4, both cheap to resolve and expensive to guess:**
+
+1. **What is `prodConvFactor` relative to?** We record a directed conversion
+   (`from_uom → to_uom`, factor); AccCloud gives a bare factor with no stated base. If the
+   direction is inverted, an imported drum-to-kilo factor is wrong by a factor of 200 and
+   surfaces as an absurd stock figure. The importer will show computed conversions in the
+   diff preview for a human to check on first import rather than committing blind.
+2. **Is `getProductRemain.masterId` the same value as `productMaster1Id`?** Both are headed
+   for `acccloud_master_id`. If they differ, matching on that column creates duplicate
+   products. The importer asserts they agree on first import and refuses to commit if they
+   do not. One real response from each endpoint settles it.

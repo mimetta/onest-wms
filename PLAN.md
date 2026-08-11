@@ -1,8 +1,13 @@
 # Onest WMS — Phase 0 Plan & Schema
 
 > **Status:** **Approved with corrections, 2026-08-10.** Corrections incorporated below.
-> **Prepared:** 2026-08-10 · **Revised:** 2026-08-10 (rev 2)
+> **Prepared:** 2026-08-10 · **Revised:** 2026-08-11 (rev 3)
 > **Scope:** 1 warehouse, <500 SKUs, plus consignment customer sites.
+>
+> **Rev 3 changes:** §18 replaced with the final AccCloud spec — authentication headers,
+> confirmed response schemas for Get Product and Get Product By Warehouse, and the
+> consequences (barcodes are WMS-native; a barcode capture flow enters Phase 1 scope).
+> Verified against the live schema: no migration required. See D-24.
 >
 > **Rev 2 changes:** posting semantics rewritten (§9) — the negative check now reads
 > on-hand at the specific source bin, and the QC gate is applied per movement class rather
@@ -39,7 +44,7 @@ stock. The guarantees live in Postgres, not in React.
 15. [Decisions recorded](#15-decisions-recorded)
 16. [Open questions](#16-open-questions)
 17. [Environment & provisioning](#17-environment--provisioning)
-18. [AccCloud API](#18-acccloud-api--recorded-implemented-in-phase-4)
+18. [AccCloud API — final spec](#18-acccloud-api--final-spec-implemented-in-phase-4)
 
 ---
 
@@ -913,71 +918,127 @@ and save the database password somewhere durable — Supabase shows it once.
 
 ---
 
-## 18. AccCloud API — recorded, implemented in Phase 4
+## 18. AccCloud API — final spec, implemented in Phase 4
 
-Recorded now so the Phase 0 schema is verified compatible. **No API code ships in Phase 0.**
+**Revised 2026-08-11** with the authentication method and confirmed response schemas.
+Supersedes the provisional spec in rev 2. **No API code ships before Phase 4.**
 
-### The one known endpoint
+### 18.1 Authentication
 
-```
-POST https://acccloud.me/api/support/Product/getProductRemain
-```
+Every call carries two headers:
 
-**Request (JSON body)**
-
-| Field | Required | Notes |
+| Header | Value | Prefix |
 |---|---|---|
-| `companyCode` | yes | Uppercase. Ours is `MMT2025`. |
-| `prodCode`, `prodName`, `whCode`, `productGroupCode` | no | Filters |
-| `searchAll` | no | `'N'` limits results, index capped at 1000 |
+| `x-api-key` | `ACCCLOUD_API_KEY` | `gw_` |
+| `x-secret-key` | `ACCCLOUD_SECRET_KEY` | `sk_` |
 
-**Response** — array of `{ masterId (decimal), prodCode, «product name», balance (decimal),
-warehouse, whCode, productGroup, productGroupCode }`.
+Keys are self-service generated in AccCloud under **setup → api-document → Generate Key**.
+Both are **server-side only** — never `NEXT_PUBLIC_`, never imported into a client component.
+`ACCCLOUD_COMPANY_CODE=MMT2025`, uppercase, sent in the request body.
 
-### What this endpoint is and is not
+The key-generation response envelope is
+`{ status: "000", message, data: { apiKey, secretKey, companyCode } }`.
+**`status: "000"` means success**, not an error code — the adapter must check for `"000"`
+explicitly rather than treating a non-empty status as failure.
 
-It returns **quantity on hand per product per warehouse**. It carries no lot, no expiry, no
-serial, no unit of measure, no barcode, and no movement history. That makes it a
-**reconciliation source, not an item-master source** — which is why CSV import stays the
-primary path for item master and opening balances (D-17).
+> **Reset Key invalidates existing keys.** The adapter must distinguish an auth rejection
+> from any other failure and surface it as *"AccCloud authentication failed — the API keys
+> may have been reset. Generate new keys under setup → api-document and update the
+> environment variables."* A generic "sync failed" here would send someone hunting through
+> the wrong logs.
 
-### Schema implications — all verified against §3–§7
+### 18.2 Confirmed endpoints
 
-| Implication | Status |
+**Get Product** — `POST /api/ProductMaster1/getByProd`, body `companyCode` + `prodValue`
+
+| Field | Maps to | Notes |
+|---|---|---|
+| `productMaster1Id` | `products.acccloud_master_id` | Stable internal ID; preferred match key (D-18) |
+| `prodCode` | `products.acccloud_item_code` | Fallback match key |
+| `prodTName` | `products.name_th` | **The clean Thai name. Use this.** |
+| `prodName` | — | A concatenated `code \|\| name` display string. Deliberately not imported. |
+| `prodVat`, `accountCodeIncome`, `prodUniqueCode`, `weight` | — | Accounting/logistics attributes with no WMS use in v1. Preserved verbatim in `erp_import_rows.raw`, so nothing is lost if they become useful later. |
+| `warehouseId` | `erp_sync_map` (`entity_type = 'warehouse'`) | Already covered |
+
+Returns **no barcode, no unit, no product group.**
+
+**Get Product By Warehouse**
+
+| Field | Maps to | Notes |
+|---|---|---|
+| `prodCode` | join key to Get Product | |
+| `unitCode`, `unitName` | `uoms.code`, `uoms.name_th` | Via `erp_sync_map` (`entity_type = 'uom'`) |
+| `unitOfMeasureId` | `erp_sync_map.external_code` for the UOM | |
+| `prodConvFactor` | `product_uom_conversions.factor` | See the caveat in §18.4 |
+| `prodBalOnHand` | reconciliation only | Never written to stock — on-hand is derived (D-01) |
+| `prodCount`, `differnce` | reconciliation display | **`differnce` is misspelled in their API. The adapter matches it exactly and does not "fix" it.** A corrected spelling would silently read `undefined`. |
+
+### 18.3 What this means for the design — confirmed
+
+| Consequence | Status |
 |---|---|
-| `prodCode` → `products.acccloud_item_code` (text) | Already present |
-| `masterId` → `products.acccloud_master_id` (numeric, unique, nullable) | **Added in rev 2.** Preferred match key; `prodCode` is the fallback, since a code can be renamed but `masterId` should not (D-18) |
-| `productGroupCode` → `product_categories` via `erp_sync_map` with `entity_type = 'category'` | **Confirmed — the generic map covers it, no schema change needed** |
-| `whCode` → `warehouses` via `erp_sync_map` | **`warehouse` added to the `entity_type` enum in rev 2.** Needed even single-warehouse, so reconciliation can assert the balances belong to our warehouse |
-| Reconciliation runs are logged | `erp_sync_log` already covers this |
+| **Barcodes are not available from AccCloud.** `product_barcodes` stays WMS-native. | Confirmed. Drives the barcode capture flow below. |
+| **API item-master sync needs both endpoints** — Get Product for codes and names, Get Product By Warehouse for unit and conversion factor, joined on `prodCode`. | Confirmed |
+| **CSV import remains the primary initial bulk-load path.** | Confirmed (D-17) |
+| **Reconciliation** uses `getProductRemain` and/or `prodBalOnHand`, keeping the 1000-row truncation guard. | Confirmed |
+| **`prodTName` preferred over `prodName`** on import. | Confirmed |
 
-**Conclusion: the Phase 0 schema does not conflict with this API.** Two additive changes
-(`acccloud_master_id`, `entity_type = 'warehouse'`) fold into the initial migrations.
+**Barcode capture flow — new Phase 1 scope, arising from this.** Since no barcode ever
+arrives from AccCloud, every product needs one from us:
 
-### Adapter requirements
+1. **Assign and print an internal barcode** for every SKU — `product_barcodes` with
+   `type = 'internal'`, `is_primary = true`. This is screen 1.3 (label printing), which
+   Phase 1 already covers.
+2. **Capture the supplier barcode at first receiving.** When a scan resolves to nothing
+   during a goods receipt, the receiver is offered "link this barcode to a product" rather
+   than a dead end — writing a `type = 'supplier'` row. The unknown-barcode error state in
+   screen 1.5 becomes a capture opportunity instead of a failure.
 
-- **The response field name for the product name is ambiguous** — the spec table says
-  `prodTName`, the worked example says `productName`. The adapter must accept either and
-  fail loudly if neither is present, rather than silently importing blank names.
-- **Auth is unknown.** The adapter takes an injected auth strategy; `ACCCLOUD_API_TOKEN` is
-  a placeholder named to survive a scheme change. Not blocking.
-- **The 1000-row cap is a real ceiling.** Under 500 SKUs we are comfortably inside it, but
-  the adapter must page by `whCode` / `productGroupCode` and **raise if a response returns
-  exactly the cap**, rather than assuming completeness. A silently truncated reconciliation
-  that reports "no variances" is worse than one that fails.
-- Same `ErpAdapter` interface as the CSV importer, so both go through one code path.
+### 18.4 Open questions for Phase 4 — not blocking
 
-### Phase 4 reconciliation report
+1. **What is `prodConvFactor` relative to?** Our `product_uom_conversions` records a
+   directed conversion (`from_uom → to_uom`, factor). AccCloud supplies a single factor
+   alongside a unit code, with no stated base. If it converts *the listed unit to the
+   product's stocking unit*, it maps directly; if it converts the other way, every imported
+   conversion would be inverted — and an inverted drum-to-kilo factor is the kind of error
+   that shows up as a wildly wrong stock figure. The importer will show computed
+   conversions in the diff preview for a human to sanity-check on first import, rather than
+   committing them blind.
 
-Compares WMS `stock_by_product` against `getProductRemain` per `prodCode`, producing
-matched / WMS-only / AccCloud-only / quantity-variance rows. Read-only in both directions —
-it produces a report for a human, never an automatic correction. Every run writes to
-`erp_sync_log` with the row counts and total absolute variance.
+2. **Is `masterId` from `getProductRemain` the same value as `productMaster1Id` from Get
+   Product?** Both are being stored in `acccloud_master_id`. If they are different
+   identifiers, matching on that column would create duplicate products. The importer
+   asserts they agree on first import and refuses to commit if they do not; one real
+   response from each endpoint settles it in a minute.
 
-Because the endpoint has no lot dimension, comparison is at product+warehouse granularity;
-WMS lot detail is shown as supporting drill-down, not as part of the match.
+### 18.5 Adapter requirements — consolidated
 
-### Still pending from AccCloud — not blocking
+- One `ErpAdapter` interface, two implementations (CSV, API). Both feed the same
+  validation, diff-preview and commit path.
+- Auth failure is its own error state (§18.1), distinct from network or data errors.
+- `status: "000"` is success.
+- Field names are matched verbatim, including `differnce`.
+- `getProductRemain` still has documented ambiguity between `prodTName` and `productName`
+  for the display name; the adapter accepts either and fails loudly if neither is present.
+- The 1000-row cap is a real ceiling: page by `whCode` / `productGroupCode`, and **raise if
+  a response returns exactly the cap** rather than assume completeness.
+- Inbound only. Nothing is ever written back to AccCloud.
+- Every run writes to `erp_sync_log`; every row's untouched payload is kept in
+  `erp_import_rows.raw`.
 
-1. Authentication method
-2. Whether a full item-master endpoint exists (units, barcodes, categories)
+### 18.6 Schema verification — no changes required
+
+Checked against the live schema on 2026-08-11:
+
+| Confirmed field | Destination | Exists? |
+|---|---|---|
+| `productMaster1Id` | `products.acccloud_master_id` (numeric, unique, nullable) | Yes |
+| `prodCode` | `products.acccloud_item_code` (text, unique, nullable) | Yes |
+| `prodTName` | `products.name_th` (text, not null) | Yes |
+| `unitCode` / `unitName` | `uoms.code` / `uoms.name_th` + `erp_sync_map` (`uom`) | Yes |
+| `prodConvFactor` | `product_uom_conversions.factor` (numeric 18,6) | Yes |
+| `warehouseId` | `erp_sync_map` (`warehouse`) | Yes |
+| unmapped attributes | `erp_import_rows.raw` (jsonb) | Yes |
+
+**Confirmed: the Phase 0 schema absorbs the final AccCloud spec with no migration.**
+
