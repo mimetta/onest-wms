@@ -498,7 +498,7 @@ not exposed in the admin UI. The negative-stock alert must exclude virtual locat
 
 ## D-22 — Goods receipts post on scan completion, with no separate approver
 
-**Date:** 2026-08-10 · **Status:** Accepted — **assumption, flagged for confirmation** · **Phase:** 0
+**Date:** 2026-08-10 · **Status:** Accepted — **confirmed by owner 2026-08-10** · **Phase:** 0
 
 **Context.** The approval chain answer arrived with the goods-receipt option left unresolved:
 "posts immediately after scanning / needs approval by warehouse manager" — both alternatives
@@ -521,6 +521,12 @@ step costs less than it would on an outbound document.
 
 **To reverse:** delete one row from `role_permissions`
 (`warehouse_staff` / `goods_receipt.approve`). No migration, no code change.
+
+**Compensating control, added on confirmation.** Because there is no approver in the flow,
+managers review receipts after the fact instead. Phase 1 must ship a "receipts posted today"
+panel on the dashboard, and `goods_receipt` posts must appear in the activity feed. That
+turns an absent gate into a visible one, which is the honest trade rather than pretending
+the risk is gone.
 
 ---
 
