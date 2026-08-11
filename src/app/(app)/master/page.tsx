@@ -16,6 +16,10 @@ export default async function MasterDataPage() {
     supabase.from("departments").select("id", { count: "exact", head: true }),
   ]);
 
+  const { count: zoneCount } = await supabase
+    .from("zones")
+    .select("id", { count: "exact", head: true });
+
   const sections = [
     {
       href: "/master/products",
@@ -28,6 +32,12 @@ export default async function MasterDataPage() {
       title: t("locations"),
       hint: t("locationsHint"),
       count: locations.count ?? 0,
+    },
+    {
+      href: "/master/zones",
+      title: t("zones"),
+      hint: t("zonesHint"),
+      count: zoneCount ?? 0,
     },
     {
       href: "/master/partners",
