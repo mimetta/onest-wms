@@ -608,3 +608,138 @@ from an assumed detail to explicit Phase 1 scope:
    for `acccloud_master_id`. If they differ, matching on that column creates duplicate
    products. The importer asserts they agree on first import and refuses to commit if they
    do not. One real response from each endpoint settles it.
+
+---
+
+## D-25 — On handheld scan screens, contrast beats palette fidelity
+
+**Date:** 2026-08-11 · **Status:** Accepted (owner instruction) · **Phase:** 1
+
+**Context.** The Mimetta palette was designed for an office application. Onest WMS also runs
+on a cheap handheld, held at arm's length, in a warehouse under fluorescent light or near a
+roller door in daylight.
+
+**Decision.** The palette applies fully on desktop screens (1.2, 1.6, 1.7), the login page
+and printed documents. On scan-first screens, brand hues remain but **legibility wins**:
+larger type, stronger field states, and scan accept/reject feedback in strong functional
+green and red (`--color-scan-ok` #047857, `--color-scan-bad` #B91C1C) rather than
+`brand.sage`. Where the two conflict, legibility wins and the deviation is noted in the
+component.
+
+**Reasoning.** `brand.sage` (#9CAE8C) against `brand.cream` (#FAF8F4) is a quiet, tasteful
+pairing — and that is exactly the problem at arm's length in glare. A worker must
+distinguish a good scan from a bad one at a glance, without reading, while holding a scanner
+in the other hand. The tones are deliberately different in *lightness*, not only hue, so the
+distinction survives both glare and colour-blindness.
+
+**Consequences.** Two visual registers in one app. That is a real cost — a designer looking
+at both will notice — but the alternative is a palette rule quietly making the warehouse
+screens harder to use. Scan feedback also pairs colour with sound and an icon, so colour is
+never the only signal.
+
+---
+
+## D-26 — Design tokens live in CSS, not tailwind.config.ts
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Phase:** 1
+
+**Context.** The palette doc specifies `tailwind.config.ts -> theme.extend.colors.brand`.
+This project is on Tailwind v4, which has no JS config file.
+
+**Decision.** Tokens are declared with `@theme` in `src/app/globals.css`. Token names and
+hex values are identical to the doc; only the declaration site differs. The doc is kept
+verbatim as supplied, since it is the design system's own artefact and is presumably shared
+with other Mimetta projects.
+
+**Reasoning.** Reintroducing a v3-style config to match the doc's wording would fight the
+framework for no benefit. The utilities generated are the same — `bg-brand-cream`,
+`border-brand-border` — so every usage in the doc still reads true.
+
+**Consequences.** Anyone following the doc literally will look for a file that does not
+exist; the pointer at the top of `globals.css` sends them to the right place. If Mimetta
+maintains a shared token package later, this file is the single point of replacement.
+
+---
+
+## D-27 — Proxy is not the authorization layer
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Phase:** 1
+
+**Context.** Next.js 16 renamed `middleware` to `proxy`. It is the obvious place to put an
+auth check, and Next's own documentation warns against exactly that.
+
+**Decision.** `src/proxy.ts` does two things only: refresh the Supabase token (a Server
+Component cannot set cookies; proxy can), and optimistically redirect a user with no session
+to `/sign-in`. Real authorization is `requireUser()` / `requirePerm()` running per request in
+the layout or page, on top of RLS in Postgres.
+
+**Reasoning.** A redirect is a UX nicety. If `proxy.ts` were deleted tomorrow, no data would
+be exposed — a signed-out user would see an empty page rather than a tidy redirect — because
+every query still runs through RLS as that user, and `post_document()` checks permissions
+itself. Treating proxy as the gate would move authorization into a layer that never touches
+the database.
+
+**Consequences.** Two places appear to check auth, which can read as redundant. It is not:
+one is a redirect, the other is the actual check. Anyone adding a route must call
+`requireUser()` in it — being inside the `(app)` group provides that via the group layout.
+
+---
+
+## D-28 — Placeholder routes for unbuilt Phase 1 screens
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Phase:** 1
+
+**Context.** `typedRoutes` is enabled, so a `<Link>` to a route that does not exist is a
+build error. The nav lists seven screens, six of which are not built yet.
+
+**Decision.** Each unbuilt screen gets a route rendering a `ComingSoon` stub that names its
+step in `PHASE1.md`.
+
+**Reasoning.** The alternatives were worse: disabling `typedRoutes` gives up compile-time
+protection against broken links in a system where a warehouse worker hitting a 404 mid-task
+is a real cost, and shipping a nav that 404s is worse still. A stub that says "not built
+yet, see PHASE1.md §1.5" is honest and makes the shell testable on a real phone now.
+
+**Consequences.** These must be replaced, not accumulated. A stub still present when its
+phase closes is a bug.
+
+---
+
+## D-29 — `label.print` is its own permission
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Phase:** 1
+
+**Context.** Found while building the nav: the Labels screen was gated on
+`master_data.read`, which `viewer` holds — so an accounting user would see a warehouse
+label-printing screen.
+
+**Decision.** A new `label.print` permission, granted to `admin`, `warehouse_manager`,
+`warehouse_staff` and `qc`. Not to `viewer`.
+
+**Reasoning.** "May read master data" and "may print barcode labels" are different
+questions, and no existing permission answered the second without mis-fitting some role.
+`qc` is included because lot labels get reprinted after a QC decision, and QC is the role
+standing at the pallet when that happens.
+
+**Consequences.** Migration 0013, one row plus four grants. This is the pattern D-09 was
+designed for: an access question answered by data rather than by a special case in the UI.
+
+---
+
+## D-30 — Seeded auth users need empty-string tokens, not NULL
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Phase:** 1
+
+**Context.** The seeded demo users could not sign in. The auth API returned
+`"Database error querying schema"`, which points at the schema and is nothing to do with it.
+
+**Decision.** `supabase/seed.sql` sets `confirmation_token`, `recovery_token`,
+`email_change_token_new` and `email_change` to `''` rather than leaving them NULL.
+
+**Reasoning.** Supabase's auth server scans those columns into non-nullable Go strings, so a
+NULL fails the scan and every sign-in dies with an error that names the wrong layer. Worth
+recording precisely because the message is so misleading — without this note, the next
+person to seed a user loses an hour.
+
+**Consequences.** Only affects hand-seeded users. Accounts created through the auth API are
+unaffected, which is why production will never hit this.

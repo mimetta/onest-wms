@@ -1,26 +1,102 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ===========================================================================
+   Mimetta design system — see docs/brand/mimetta-color-palette.md
+
+   The palette doc describes tailwind.config.ts -> theme.extend.colors.brand.
+   This project is on Tailwind v4, which has no JS config file: tokens are
+   declared here in CSS with @theme and generate the same utility classes
+   (bg-brand-cream, border-brand-border, text-brand-dark, ...). Token names and
+   hex values are identical to the doc; only the declaration site differs.
+   Recorded as D-26.
+   =========================================================================== */
+
+@theme {
+  /* Brand tokens */
+  --color-brand-brown: #1f3a2b;
+  --color-brand-accent: #bd5a2e;
+  --color-brand-cream: #faf8f4;
+  --color-brand-border: #d8cbb0;
+  --color-brand-sage: #9cae8c;
+  --color-brand-dark: #1a1a1a;
+  --color-brand-muted: #6b7280;
+  --color-brand-subtle: #9ca3af;
+
+  /* Non-token surfaces and states, named so they are not retyped as raw hex */
+  --color-surface: #ffffff;
+  --color-table-header: #f9f8f6;
+  --color-destructive: #dc2626;
+  --color-danger-bg: #fef2f2;
+
+  --color-info-bg: #dbeafe;
+  --color-info-fg: #3b82f6;
+  --color-warning-bg: #fef3c7;
+  --color-warning-fg: #f59e0b;
+  --color-warning-text: #92400e;
+  --color-success-bg: #d1fae5;
+  --color-success-fg: #065f46;
+
+  /* Scan feedback — deliberately NOT brand.sage.
+     On handheld scan screens contrast wins over palette fidelity: a worker in
+     bright warehouse light must tell a good scan from a bad one at a glance,
+     and sage against cream does not carry that far. Distinct tones, not just
+     distinct hues, so the difference survives glare and colour-blindness.
+     Recorded as D-25. */
+  --color-scan-ok: #047857;
+  --color-scan-ok-bg: #ecfdf5;
+  --color-scan-bad: #b91c1c;
+  --color-scan-bad-bg: #fef2f2;
+
+  /* Typography: DM Sans with Noto Sans Thai as the Thai fallback */
+  --font-sans:
+    var(--font-dm-sans), var(--font-noto-thai), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Layout metrics from the palette doc */
+  --spacing-nav: 56px;
+  --radius-card: 10px;
+  --height-input: 36px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@layer base {
+  html {
+    /* Warehouse handhelds are often used with one hand and a scanner in the
+       other. Never let a mis-tap select a label. */
+    -webkit-tap-highlight-color: transparent;
+  }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  body {
+    /* cream is the page background only — never a card, input or table */
+    background-color: var(--color-brand-cream);
+    color: var(--color-brand-dark);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Every interactive element must show a visible focus ring: the scan-first
+     screens are driven entirely by keyboard focus moving between fields, so an
+     invisible focus state would make them unusable rather than merely
+     inaccessible. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-brown);
+    outline-offset: 2px;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer utilities {
+  /* Numeric columns line up: quantities, document numbers, dates */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media print {
+  /* Printed Thai documents and labels: no page background, no chrome */
+  body {
+    background: #fff;
+  }
+
+  .no-print {
+    display: none !important;
+  }
 }

@@ -289,9 +289,14 @@ insert into adjustment_reasons (code, name_th, name_en, direction, is_disposal) 
 -- Password for every demo account: onest1234
 -- =====================================================================
 
+-- The token columns are set to '' rather than left NULL on purpose. Supabase's
+-- auth server scans them into non-nullable Go strings, so a NULL makes every
+-- sign-in fail with an opaque "Database error querying schema" — the error
+-- points at the schema, but the cause is these four columns.
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password,
   email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
+  confirmation_token, recovery_token, email_change_token_new, email_change,
   created_at, updated_at
 )
 select
@@ -300,6 +305,7 @@ select
   crypt('onest1234', gen_salt('bf')),
   now(), '{"provider":"email","providers":["email"]}'::jsonb,
   jsonb_build_object('full_name', u.full_name),
+  '', '', '', '',
   now(), now()
 from (values
   ('admin@onest.co.th',    'สมชาย ผู้ดูแลระบบ'),

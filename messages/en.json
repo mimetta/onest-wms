@@ -1,0 +1,94 @@
+{
+  "app": {
+    "name": "Onest WMS",
+    "tagline": "Warehouse Management System"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "stock": "Stock",
+    "receive": "Receive",
+    "qc": "QC",
+    "documents": "Documents",
+    "labels": "Labels",
+    "master": "Master data",
+    "admin": "Admin",
+    "signOut": "Sign out",
+    "language": "Language",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
+  },
+  "auth": {
+    "signInTitle": "Sign in",
+    "signInSubtitle": "Onest Warehouse Management System",
+    "email": "Email",
+    "password": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "signedOut": "Signed out",
+    "errorInvalid": "That email or password is not correct",
+    "errorInactive": "This account is deactivated. Ask an administrator to reactivate it.",
+    "errorNoProfile": "This account has no permissions set up yet. Ask an administrator.",
+    "errorGeneric": "Sign in failed. Please try again.",
+    "required": "Fill in both fields"
+  },
+  "roles": {
+    "admin": "Administrator",
+    "warehouse_manager": "Warehouse manager",
+    "warehouse_staff": "Warehouse staff",
+    "qc": "Quality control",
+    "viewer": "Viewer"
+  },
+  "documents": {
+    "goods_receipt": "Goods receipt",
+    "requisition": "Requisition",
+    "issue": "Issue slip",
+    "transfer": "Transfer",
+    "delivery_note": "Delivery note",
+    "consignment_settlement": "Consignment settlement",
+    "adjustment": "Stock adjustment",
+    "cycle_count": "Count sheet"
+  },
+  "status": {
+    "draft": "Draft",
+    "submitted": "Submitted",
+    "approved": "Approved",
+    "dispatched": "Dispatched",
+    "posted": "Posted",
+    "cancelled": "Cancelled"
+  },
+  "qcStatus": {
+    "pending_qc": "Awaiting QC",
+    "passed": "Passed",
+    "failed": "Failed",
+    "quarantined": "Quarantined"
+  },
+  "health": {
+    "title": "System health",
+    "subtitle": "Confirms the database connection, permissions and ledger are working",
+    "signedInAs": "Signed in as",
+    "role": "Role",
+    "warehouse": "Warehouse",
+    "locale": "Language",
+    "products": "Products",
+    "locations": "Locations",
+    "movements": "Stock movements",
+    "onHand": "Total on hand",
+    "openingBin": "Opening bin balance",
+    "ledgerBalanced": "Ledger balanced",
+    "ledgerUnbalanced": "Ledger NOT balanced",
+    "ledgerExplain": "Opening balances must equal real stock with the opposite sign",
+    "permissions": "Permissions granted"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "Something went wrong",
+    "retry": "Try again",
+    "save": "Save",
+    "cancel": "Cancel",
+    "search": "Search",
+    "clearAll": "Clear all",
+    "notFound": "Not found",
+    "yes": "Yes",
+    "no": "No"
+  }
+}
