@@ -4,6 +4,7 @@ import { can, type SessionUser } from "@/lib/auth";
 import { Wordmark } from "./wordmark";
 import { LocaleSwitcher } from "./locale-switcher";
 import { NavLinks, type NavItem } from "./nav-links";
+import { MobileTabBar } from "./mobile-tab-bar";
 import { SignOutButton } from "./sign-out-button";
 
 /**
@@ -35,26 +36,34 @@ export async function Nav({ user }: { user: SessionUser }) {
   const items = allItems.filter((item) => !item.perm || can(user, item.perm));
 
   return (
-    <header className="border-brand-border sticky top-0 z-30 border-b bg-white">
-      <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-4 px-4">
-        <Link href="/" className="shrink-0">
-          <Wordmark compact />
-        </Link>
+    <>
+      <header className="border-brand-border sticky top-0 z-30 border-b bg-white">
+        <div className="mx-auto flex h-14 max-w-[1280px] items-center gap-4 px-4">
+          <Link href="/" className="shrink-0">
+            <Wordmark compact />
+          </Link>
 
-        <NavLinks items={items} />
-
-        <div className="ml-auto flex shrink-0 items-center gap-3">
-          <div className="hidden text-right sm:block">
-            <div className="text-brand-dark text-xs font-medium">{user.fullName}</div>
-            <div className="text-brand-subtle text-[11px]">
-              {tRoles(user.role)}
-              {user.warehouseCode ? ` · ${user.warehouseCode}` : ""}
-            </div>
+          {/* Links live in the top bar on desktop and in the bottom tab bar on
+              mobile, so this is hidden rather than squeezed. */}
+          <div className="hidden min-w-0 flex-1 sm:flex">
+            <NavLinks items={items} />
           </div>
-          <LocaleSwitcher />
-          <SignOutButton label={t("signOut")} />
+
+          <div className="ml-auto flex shrink-0 items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <div className="text-brand-dark text-xs font-medium">{user.fullName}</div>
+              <div className="text-brand-subtle text-[11px]">
+                {tRoles(user.role)}
+                {user.warehouseCode ? ` · ${user.warehouseCode}` : ""}
+              </div>
+            </div>
+            <LocaleSwitcher />
+            <SignOutButton label={t("signOut")} />
+          </div>
         </div>
-      </div>
-    </header>
+      </header>
+
+      <MobileTabBar items={items} />
+    </>
   );
 }

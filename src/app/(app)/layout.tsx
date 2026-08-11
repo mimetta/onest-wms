@@ -12,7 +12,8 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
   return (
     <>
       <Nav user={user} />
-      <main className="mx-auto max-w-[1280px] px-4 py-6">{children}</main>
+      {/* pb-24 on mobile clears the fixed bottom tab bar; sm:pb-6 drops it. */}
+      <main className="mx-auto max-w-[1280px] px-4 pt-6 pb-24 sm:pb-6">{children}</main>
     </>
   );
 }
