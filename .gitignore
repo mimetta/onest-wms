@@ -38,3 +38,6 @@ Thumbs.db
 .idea/
 .vercel
 .env*
+
+# Generated credentials for the hosted demo environment — never committed
+.demo-credentials
