@@ -743,3 +743,30 @@ person to seed a user loses an hour.
 
 **Consequences.** Only affects hand-seeded users. Accounts created through the auth API are
 unaffected, which is why production will never hit this.
+
+---
+
+## D-31 — Nothing depends on the process timezone
+
+**Date:** 2026-08-11 · **Status:** Accepted · **Phase:** 1
+
+**Context.** Vercel reserves the environment variable name `TZ` and rejects it. The brief
+asks for "Timezone Asia/Bangkok everywhere."
+
+**Decision.** Bangkok time is applied explicitly at every point that needs it, never via the
+process timezone:
+
+- Postgres: `bkk_today()` does `(now() at time zone 'Asia/Bangkok')::date`; all timestamps
+  are `timestamptz`
+- The app: next-intl is configured with `timeZone: "Asia/Bangkok"`
+- `TZ` stays in `.env.example` for local development, where it costs nothing
+
+**Reasoning.** This was already the design in migration 0001 — the comment there says a cron
+job, an Edge Function and a developer's psql session can each have a different session
+timezone, so relying on it would produce different answers in different places. Vercel's
+restriction only confirmed the choice: the deployment runs UTC and every date is still
+correct.
+
+**Consequences.** Any new code that needs a Bangkok calendar date must call `bkk_today()` or
+format through next-intl. `new Date().getDate()` on the server is a bug, and will be wrong
+by a day for seven hours out of every twenty-four.
