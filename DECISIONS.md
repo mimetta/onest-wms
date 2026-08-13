@@ -885,3 +885,79 @@ manual entry form behind `cost.write`.
 **Open, not assumed:** whether AccCloud exposes MOQ or purchase price at all. Recorded as a
 question in PLAN.md §18.4 rather than designed around a guess. If the API does not expose
 them, CSV import and manual entry are the paths.
+
+---
+
+## D-35 — Labelling policy: what gets a sticker, and what does not
+
+**Date:** 2026-08-13 · **Status:** Accepted (owner decision) · **Phase:** 1
+
+**Context.** Most products arrive carrying a factory GS1 EAN-13. The obvious-looking move —
+print our own barcode for everything so the system is internally consistent — would mean
+relabelling goods that already have a perfectly good barcode.
+
+**Decision.** Three cases, three answers:
+
+| Case | Label |
+|---|---|
+| Product has a factory EAN-13 | **None.** Scanned as-is. Never stickered over. |
+| Lot-tracked goods (drums, handling units) | **One lot label per drum**, the primary scan target. A lot resolves its product, so one scan identifies both. |
+| Product with no barcode at all | **Code 128 shelf-edge label at its bin** — not a sticker on every piece. Receiving supports "scan the shelf label, type the quantity". |
+
+**Reasoning.** Relabelling is work that buys nothing: the factory barcode already uniquely
+identifies the product, and covering it invites the failure where a scanner reads the old
+code through a badly-placed sticker. Per-piece stickers on unbarcoded goods are worse still —
+a box of 500 washers does not need 500 labels to be findable, it needs one label on the shelf.
+
+Lot labels being the primary scan target follows from the ledger: lot-tracked stock cannot
+move without a lot, so the scan that identifies the lot is the one that matters.
+
+**Consequences.**
+
+- The label screen has a **shelf** tab that lists only products with no barcode — offering a
+  shelf label for a factory-barcoded product would invite exactly what the policy forbids.
+- A new **100 × 150 mm drum label** (2-up on A4) carries product name, SKU, lot, expiry,
+  received date, the Code 128 lot barcode, and a QC block.
+- **The printed QC status is a snapshot.** A lot can fail QC after its label is on the drum,
+  so the label says so in small print and the scan remains the authority. Phase 1.6 gets a
+  one-click "print updated label" so a drum can be relabelled after a QC decision — the fix
+  for a stale label is a fresh label, not trusting the old one.
+
+---
+
+## D-36 — A scanned value is opaque; symbology is a capture-time hint only
+
+**Date:** 2026-08-13 · **Status:** Accepted (owner requirement) · **Phase:** 1
+
+**Context.** The system now expects at least four symbologies in daily use: factory EAN-13,
+ITF-14 case codes, our own Code 128, and QR (the COA codes on some raw-material drums).
+
+**Decision.** **Resolution never inspects the value.** `resolveBarcode()` looks the string up
+in `product_barcodes`, then `locations`, then `lots.lot_no`, exactly as scanned. The only
+normalisation is trimming whitespace — no case folding, no padding, and specifically no
+stripping of leading zeros, which are significant in a GTIN.
+
+Symbology is used in exactly one place: **capture**, when a human is being asked what they
+just scanned, so the form can default sensibly.
+
+| Captured value | Default |
+|---|---|
+| 13 digits, valid GS1 check digit | `supplier`, no unit prompt |
+| 14 digits, valid GS1 check digit | `case`, **always** prompts for the unit |
+| Anything else | `internal` |
+| 13–14 digits, check digit fails | `internal`, with a misread warning |
+
+**Reasoning.** A rule like "13 digits means a product" is wrong the first time a supplier's
+case code or a lot number happens to be 13 digits. Uniqueness already lives in the database,
+where it belongs, and a lookup cannot be fooled by a coincidence of length.
+
+The ITF-14 unit prompt is the one place the code refuses to guess: assuming pieces when the
+scan meant a case would make every receipt of that code wrong by the case quantity, and the
+error would surface weeks later as an unexplained stock discrepancy.
+
+**Consequences.** Camera scanning restricts ZXing to those five formats — attempting every
+symbology it knows is slower and more likely to misread a blurry frame as a format we never
+use. Wedge scanners decode in hardware, so none of this applies to them: they simply type.
+
+**Verified:** nothing in the scan path assumes Code 128 format or length. The Code 128
+encoder is used only for *printing* our own labels, never for reading.

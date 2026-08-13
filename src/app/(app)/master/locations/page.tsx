@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { requirePerm } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { SearchBox } from "@/components/search-box";
+import { PrintLabelLink } from "@/components/print-label-link";
 import {
   Badge,
   EmptyState,
@@ -94,8 +95,14 @@ export default async function LocationsPage({
                         {!l.is_active && <Badge tone="bad">{t("inactive")}</Badge>}
                       </div>
                     </Td>
-                    <Td className="text-right">
-                      {/* Virtual bins are system-owned; there is nothing to edit. */}
+                    <Td className="text-right whitespace-nowrap">
+                      {/* Virtual bins are system-owned: nothing to edit, and a
+                          label for one would have nowhere to go. */}
+                      {!l.is_virtual && (
+                        <>
+                          <PrintLabelLink kind="location" id={l.id} compact />{" "}
+                        </>
+                      )}
                       {!l.is_virtual && (
                         <Link
                           href={`/master/locations/${l.id}`}

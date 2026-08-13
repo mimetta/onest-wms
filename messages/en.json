@@ -196,7 +196,8 @@
     "priceSource": "Source",
     "addPrice": "Record price",
     "priceSaved": "Price recorded",
-    "enrichmentSection": "WMS-owned details"
+    "enrichmentSection": "WMS-owned details",
+    "printLabel": "Print label"
   },
   "labels": {
     "title": "Labels",
@@ -219,6 +220,36 @@
     "mfg": "Made",
     "lot": "Lot",
     "unit": "Unit",
-    "noBarcodeWarning": "This product has no barcode yet — its SKU will be used instead"
+    "noBarcodeWarning": "This product has no barcode yet — its SKU will be used instead",
+    "kindShelf": "Shelf-edge labels",
+    "encodingNote": "Internal barcodes encode identifiers that already exist — SKU, lot number, location code — as Code 128. Nothing is invented.",
+    "factoryNote": "Products with a factory EAN-13 are scanned as they are. Do not sticker over them.",
+    "shelfNote": "Products with no barcode get one label on the shelf edge, not a sticker on every piece.",
+    "lotNote": "Lot labels are the primary scan target: one per drum or handling unit.",
+    "printLabel": "Print label",
+    "qcSnapshot": "Printed QC status is a snapshot from print time. The scan is the source of truth.",
+    "receivedDate": "Received",
+    "hasFactoryBarcode": "Factory barcode",
+    "noBarcodeShelf": "No barcode – use a shelf label"
+  },
+  "scan": {
+    "title": "Scan",
+    "placeholder": "Scan a barcode, or type a code",
+    "useCamera": "Use camera",
+    "closeCamera": "Close camera",
+    "cameraUnavailable": "Camera unavailable. Allow camera access, or use a handheld scanner.",
+    "notFound": "Barcode not recognised",
+    "notFoundHint": "Check you scanned the right label, or link this barcode to a product.",
+    "linkBarcode": "Link this barcode to a product",
+    "foundProduct": "Product",
+    "foundLocation": "Location",
+    "foundLot": "Lot",
+    "checkDigitWarning": "This 13–14 digit code fails its check digit — it may have been misread.",
+    "scanAgain": "Scan again",
+    "lastScan": "Last scan",
+    "sourceWedge": "Scanner",
+    "sourceCamera": "Camera",
+    "sourceManual": "Typed",
+    "qcBlocked": "This lot has not passed QC"
   }
 }

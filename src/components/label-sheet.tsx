@@ -5,8 +5,8 @@ import type { LabelSize, LabelSpec } from "@/lib/labels/types";
  * The browser-printable LabelRenderer.
  *
  * Labels are laid out on an A4 grid because no label printer has been bought
- * yet, and a sheet of adhesive labels works on any office printer. The
- * `@page` rule and the mm-based sizing mean a future roll printer needs only a
+ * yet, and a sheet of adhesive labels works on any office printer. The `@page`
+ * rule and the mm-based sizing mean a future roll printer needs only a
  * different size entry, not different components.
  */
 export function LabelSheet({ labels, size }: { labels: LabelSpec[]; size: LabelSize }) {
@@ -46,15 +46,94 @@ export function LabelSheet({ labels, size }: { labels: LabelSpec[]; size: LabelS
 }
 
 function LabelCell({ label, size }: { label: LabelSpec; size: LabelSize }) {
-  // Small stock gets a tighter layout: a 50x25 bin label has room for a barcode
-  // and its code, nothing else.
+  const cellStyle = { width: `${size.widthMm}mm`, height: `${size.heightMm}mm` };
+  const frame =
+    "label-cell flex flex-col overflow-hidden border border-dashed border-neutral-300 print:border-transparent";
+
+  // The 100x150 drum label is its own template: it is the primary scan target
+  // in the warehouse and carries the QC block, so it gets room rather than a
+  // squeezed version of the small layout.
+  if (size.heightMm >= 140) {
+    return (
+      <div className={`${frame} justify-between px-4 py-3`} style={cellStyle}>
+        <div className="flex flex-col gap-1">
+          {label.secondary && (
+            <div className="text-[13pt] leading-tight font-bold text-black">
+              {label.secondary}
+            </div>
+          )}
+          {label.fields?.map((f) => (
+            <div key={f.label} className="flex gap-2 text-[10pt] leading-snug">
+              <span className="w-[22mm] shrink-0 text-neutral-600">{f.label}</span>
+              <span className="font-medium text-black">{f.value}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <Barcode value={label.barcode} heightMm={22} />
+          <div className="text-center font-mono text-[11pt] tracking-tight text-black">
+            {label.primary}
+          </div>
+        </div>
+
+        {label.qc ? (
+          <div className="border-t-2 border-black pt-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[9pt] text-neutral-600">QC</span>
+              <span className="text-[14pt] leading-none font-bold text-black">
+                {label.qc.statusLabel}
+              </span>
+            </div>
+            {(label.qc.decidedBy || label.qc.decidedAt) && (
+              <div className="mt-0.5 flex justify-between gap-2 text-[8pt] text-neutral-700">
+                <span>{label.qc.decidedBy ?? ""}</span>
+                <span>{label.qc.decidedAt ?? ""}</span>
+              </div>
+            )}
+            {/* The printed status can go stale the moment QC changes its mind.
+                Saying so on the label is cheaper than a wrong assumption. */}
+            <div className="mt-0.5 text-[6.5pt] leading-tight text-neutral-500">
+              {label.qc.caveat}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  // Shelf-edge strip: the bin's own label for a product with no barcode of its
+  // own. Product name gets the space, because a person reads this to find the
+  // right shelf and only then scans.
+  if (label.kind === "shelf") {
+    return (
+      <div className={`${frame} justify-center gap-0.5 px-3 py-1`} style={cellStyle}>
+        <div className="truncate text-[11pt] leading-tight font-bold text-black">
+          {label.secondary}
+        </div>
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1">
+            <Barcode value={label.barcode} heightMm={9} />
+          </div>
+          <div className="shrink-0 text-right">
+            <div className="font-mono text-[8pt] leading-tight text-black">
+              {label.primary}
+            </div>
+            {label.details?.[0] && (
+              <div className="text-[7pt] leading-tight text-neutral-600">
+                {label.details[0].value}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const compact = size.heightMm <= 30;
 
   return (
-    <div
-      className="label-cell flex flex-col justify-center overflow-hidden border border-dashed border-neutral-300 px-2 py-1 print:border-transparent"
-      style={{ width: `${size.widthMm}mm`, height: `${size.heightMm}mm` }}
-    >
+    <div className={`${frame} justify-center px-2 py-1`} style={cellStyle}>
       {!compact && label.secondary && (
         <div
           className="truncate text-[9pt] leading-tight font-medium text-black"

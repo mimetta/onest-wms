@@ -3,6 +3,7 @@ import { getTranslations } from "next-intl/server";
 import { requirePerm } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { Banner, PageHeader } from "@/components/ui";
+import { PrintLabelLink } from "@/components/print-label-link";
 import { LocationForm } from "../location-form";
 
 export default async function EditLocationPage({
@@ -44,7 +45,11 @@ export default async function EditLocationPage({
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <PageHeader title={location.code} subtitle={t("editLocation")} />
+      <PageHeader
+        title={location.code}
+        subtitle={t("editLocation")}
+        action={<PrintLabelLink kind="location" id={location.id} />}
+      />
       <LocationForm
         values={{
           id: location.id,

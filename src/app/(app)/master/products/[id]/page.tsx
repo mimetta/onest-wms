@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { can, requirePerm } from "@/lib/auth";
 import { PriceHistory } from "../price-history";
+import { PrintLabelLink } from "@/components/print-label-link";
 import { createClient } from "@/lib/supabase/server";
 import { Badge, Card, PageHeader, SectionLabel } from "@/components/ui";
 import { ProductForm } from "../product-form";
@@ -41,7 +42,11 @@ export default async function EditProductPage({
 
   return (
     <div className="flex max-w-3xl flex-col gap-6">
-      <PageHeader title={product.sku} subtitle={product.name_th} />
+      <PageHeader
+        title={product.sku}
+        subtitle={product.name_th}
+        action={<PrintLabelLink kind="product" id={product.id} />}
+      />
 
       <ProductForm
         values={{

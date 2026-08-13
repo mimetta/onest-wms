@@ -2,83 +2,126 @@ import Link from "next/link";
 import { getFormatter, getTranslations } from "next-intl/server";
 import { requirePerm } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { PageHeader } from "@/components/ui";
+import { Banner, PageHeader } from "@/components/ui";
 import { LabelPicker, type PickableItem } from "./label-picker";
 import type { LabelKind } from "@/lib/labels/types";
 
-const KINDS: LabelKind[] = ["product", "lot", "location"];
+const KINDS: LabelKind[] = ["product", "shelf", "lot", "location"];
 
 export default async function LabelsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string }>;
+  searchParams: Promise<{ kind?: string; ids?: string }>;
 }) {
   await requirePerm("label.print");
   const t = await getTranslations("labels");
   const tm = await getTranslations("master");
+  const tq = await getTranslations("qcStatus");
   const format = await getFormatter();
-  const { kind: rawKind } = await searchParams;
+  const { kind: rawKind, ids } = await searchParams;
 
   const kind: LabelKind = KINDS.includes(rawKind as LabelKind)
     ? (rawKind as LabelKind)
     : "product";
 
+  // Deep link from a list or detail page: /labels?kind=lot&ids=uuid,uuid
+  const preselected = (ids ?? "").split(",").filter(Boolean);
+
   const supabase = await createClient();
   let items: PickableItem[] = [];
+  let note: string | undefined;
 
-  if (kind === "product") {
+  if (kind === "product" || kind === "shelf") {
     const { data } = await supabase
       .from("products")
       .select("id, sku, name_th, product_barcodes(barcode, is_primary)")
       .eq("is_active", true)
       .order("sku");
 
-    items = (data ?? []).map((p) => {
+    const rows = (data ?? []).map((p) => {
       const codes = (p.product_barcodes ?? []) as unknown as {
         barcode: string;
         is_primary: boolean;
       }[];
       const primary = codes.find((c) => c.is_primary) ?? codes[0];
-      return {
+      return { p, primary, hasBarcode: Boolean(primary) };
+    });
+
+    if (kind === "shelf") {
+      // Shelf-edge labels exist for products that have no barcode of their own
+      // (D-35). Products carrying a factory EAN-13 are excluded — relabelling
+      // them is exactly what the policy forbids.
+      note = t("shelfNote");
+      items = rows
+        .filter((r) => !r.hasBarcode)
+        .map(({ p }) => ({
+          id: p.id,
+          barcode: p.sku,
+          primary: p.sku,
+          secondary: p.name_th,
+          details: [{ label: "SKU", value: p.sku }],
+        }));
+    } else {
+      note = t("factoryNote");
+      items = rows.map(({ p, primary, hasBarcode }) => ({
         id: p.id,
-        // A product with no barcode row still needs a label — printing its SKU
-        // is how it gets one. AccCloud supplies no barcodes (D-24), so this is
-        // the normal path on day one, not an edge case.
         barcode: primary?.barcode ?? p.sku,
         primary: primary?.barcode ?? p.sku,
         secondary: p.name_th,
         details: [{ label: "SKU", value: p.sku }],
-        synthesised: !primary,
-      };
-    });
+        synthesised: !hasBarcode,
+        hint: hasBarcode ? t("hasFactoryBarcode") : t("noBarcodeShelf"),
+      }));
+    }
   }
 
   if (kind === "lot") {
+    note = t("lotNote");
     const { data } = await supabase
       .from("lots")
-      .select("id, lot_no, expiry_date, qc_status, products(sku, name_th)")
+      .select(
+        "id, lot_no, mfg_date, expiry_date, qc_status, qc_at, created_at, products(sku, name_th), qc_by_profile:user_profiles!lots_qc_by_fkey(full_name)",
+      )
       .order("created_at", { ascending: false })
       .limit(300);
 
+    const dateOnly = (value: string) =>
+      format.dateTime(new Date(value), {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+
     items = (data ?? []).map((l) => {
       const product = l.products as unknown as { sku: string; name_th: string } | null;
-      const details: { label: string; value: string }[] = [];
-      if (l.expiry_date) {
-        details.push({
-          label: t("expiry"),
-          value: format.dateTime(new Date(l.expiry_date), {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          }),
-        });
-      }
+      const decidedBy = l.qc_by_profile as unknown as { full_name: string } | null;
+
+      const fields = [
+        { label: "SKU", value: product?.sku ?? "—" },
+        { label: t("lot"), value: l.lot_no },
+      ];
+      if (l.expiry_date)
+        fields.push({ label: t("expiry"), value: dateOnly(l.expiry_date) });
+      if (l.created_at)
+        fields.push({ label: t("receivedDate"), value: dateOnly(l.created_at) });
+
       return {
         id: l.id,
         barcode: l.lot_no,
         primary: l.lot_no,
-        secondary: product ? `${product.sku} · ${product.name_th}` : undefined,
-        details,
+        secondary: product?.name_th,
+        details: l.expiry_date
+          ? [{ label: t("expiry"), value: dateOnly(l.expiry_date) }]
+          : [],
+        fields,
+        qc: {
+          status: l.qc_status,
+          statusLabel: tq(l.qc_status),
+          decidedBy: decidedBy?.full_name,
+          decidedAt: l.qc_at ? dateOnly(l.qc_at) : undefined,
+          caveat: t("qcSnapshot"),
+        },
+        hint: tq(l.qc_status),
       };
     });
   }
@@ -86,10 +129,8 @@ export default async function LabelsPage({
   if (kind === "location") {
     const { data } = await supabase
       .from("locations")
-      .select("id, code, barcode, is_virtual, zones(name_th)")
+      .select("id, code, barcode, zones(name_th)")
       .eq("is_active", true)
-      // Virtual bins are never physically visited, so a label for one would be
-      // a sticker with nowhere to go.
       .eq("is_virtual", false)
       .order("code");
 
@@ -106,6 +147,7 @@ export default async function LabelsPage({
 
   const tabLabel: Record<LabelKind, string> = {
     product: t("kindProduct"),
+    shelf: t("kindShelf"),
     lot: t("kindLot"),
     location: t("kindLocation"),
   };
@@ -114,15 +156,20 @@ export default async function LabelsPage({
     <div className="flex flex-col gap-6">
       <PageHeader title={t("title")} subtitle={t("subtitle")} />
 
-      <nav className="border-brand-border flex gap-1 border-b">
+      {/* Nothing here mints a new identifier — worth saying plainly, because
+          "the system generates barcodes" is a reasonable thing to assume and
+          would change how people treat the codes. */}
+      <Banner tone="info">{t("encodingNote")}</Banner>
+
+      <nav className="border-brand-border flex gap-1 overflow-x-auto border-b">
         {KINDS.map((k) => (
           <Link
             key={k}
             href={k === "product" ? "/labels" : `/labels?kind=${k}`}
             className={
               k === kind
-                ? "border-brand-brown text-brand-dark -mb-px border-b-2 px-3 py-2 text-sm font-semibold"
-                : "text-brand-muted hover:text-brand-dark -mb-px border-b-2 border-transparent px-3 py-2 text-sm"
+                ? "border-brand-brown text-brand-dark -mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-semibold whitespace-nowrap"
+                : "text-brand-muted hover:text-brand-dark -mb-px shrink-0 border-b-2 border-transparent px-3 py-2 text-sm whitespace-nowrap"
             }
           >
             {tabLabel[k]}
@@ -130,10 +177,12 @@ export default async function LabelsPage({
         ))}
       </nav>
 
+      {note && <p className="text-brand-muted text-sm">{note}</p>}
+
       {items.length === 0 ? (
         <p className="text-brand-muted text-sm">{tm("noResults")}</p>
       ) : (
-        <LabelPicker key={kind} kind={kind} items={items} />
+        <LabelPicker key={kind} kind={kind} items={items} preselectedIds={preselected} />
       )}
     </div>
   );

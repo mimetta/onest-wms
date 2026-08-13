@@ -3,6 +3,7 @@ import type { Route } from "next";
 import { getTranslations } from "next-intl/server";
 import { can, requirePerm } from "@/lib/auth";
 import { SourceBadge } from "@/components/source-badge";
+import { PrintLabelLink } from "@/components/print-label-link";
 import { createClient } from "@/lib/supabase/server";
 import { SearchBox } from "@/components/search-box";
 import {
@@ -118,7 +119,8 @@ export default async function ProductsPage({
                         {!p.is_active && <Badge tone="bad">{t("inactive")}</Badge>}
                       </div>
                     </Td>
-                    <Td className="text-right">
+                    <Td className="text-right whitespace-nowrap">
+                      <PrintLabelLink kind="product" id={p.id} compact />{" "}
                       <Link
                         href={`/master/products/${p.id}`}
                         className="text-brand-brown hover:text-brand-accent text-sm font-medium"

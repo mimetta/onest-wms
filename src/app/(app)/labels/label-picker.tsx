@@ -7,7 +7,9 @@ import { LabelSheet } from "@/components/label-sheet";
 import {
   DEFAULT_SIZE_FOR,
   LABEL_SIZES,
+  sizesFor,
   type LabelKind,
+  type LabelQc,
   type LabelSpec,
 } from "@/lib/labels/types";
 
@@ -18,13 +20,29 @@ export type PickableItem = {
   primary: string;
   secondary?: string;
   details?: { label: string; value: string }[];
+  /** Larger fields for the 100x150 drum label. */
+  fields?: { label: string; value: string }[];
+  qc?: LabelQc;
   /** True when this row had no barcode row of its own. */
   synthesised?: boolean;
+  /** Short right-aligned note in the picker list, e.g. QC status. */
+  hint?: string;
 };
 
-export function LabelPicker({ kind, items }: { kind: LabelKind; items: PickableItem[] }) {
+export function LabelPicker({
+  kind,
+  items,
+  preselectedIds = [],
+}: {
+  kind: LabelKind;
+  items: PickableItem[];
+  /** Ids passed in the URL, so a "print label" link arrives ready to print. */
+  preselectedIds?: string[];
+}) {
   const t = useTranslations("labels");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(preselectedIds.filter((id) => items.some((i) => i.id === id))),
+  );
   const [sizeId, setSizeId] = useState(DEFAULT_SIZE_FOR[kind]);
 
   const size = LABEL_SIZES[sizeId];
@@ -40,6 +58,8 @@ export function LabelPicker({ kind, items }: { kind: LabelKind; items: PickableI
           primary: i.primary,
           secondary: i.secondary,
           details: i.details,
+          fields: i.fields,
+          qc: i.qc,
         })),
     [items, selected, kind],
   );
@@ -97,6 +117,11 @@ export function LabelPicker({ kind, items }: { kind: LabelKind; items: PickableI
                       {item.secondary}
                     </span>
                   )}
+                  {item.hint && (
+                    <span className="text-brand-subtle ml-auto shrink-0 text-xs">
+                      {item.hint}
+                    </span>
+                  )}
                 </label>
               </li>
             ))}
@@ -110,7 +135,7 @@ export function LabelPicker({ kind, items }: { kind: LabelKind; items: PickableI
               onChange={(e) => setSizeId(e.target.value)}
               className="w-40"
             >
-              {Object.values(LABEL_SIZES).map((s) => (
+              {sizesFor(kind).map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.widthMm} × {s.heightMm} mm
                 </option>
