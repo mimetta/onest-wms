@@ -5,7 +5,8 @@ import { PageHeader } from "@/components/ui";
 import { ProductForm } from "../product-form";
 
 export default async function NewProductPage() {
-  await requirePerm("master_data.write");
+  // Creation is admin-only: AccCloud is the system of record for existence (D-33).
+  await requirePerm("master_data.create");
   const t = await getTranslations("master");
   const supabase = await createClient();
 
@@ -29,7 +30,10 @@ export default async function NewProductPage() {
           requires_qc: false,
           is_consignment_eligible: false,
           acccloud_item_code: "",
+          supplier_moq: "",
           is_active: true,
+          source: "local",
+          acccloud_linked_at: null,
         }}
         categories={categories ?? []}
         uoms={uoms ?? []}

@@ -1,5 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { requirePerm } from "@/lib/auth";
+import { SourceBadge } from "@/components/source-badge";
 import { createClient } from "@/lib/supabase/server";
 import { SearchBox } from "@/components/search-box";
 import { Badge, EmptyState, PageHeader, Table, TableWrap, Td, Th } from "@/components/ui";
@@ -16,7 +17,12 @@ export default async function PartnersPage({
 
   let query = supabase
     .from("partners")
-    .select("id, code, type, name_th, name_en, phone, is_active", { count: "exact" })
+    .select(
+      "id, code, type, name_th, name_en, phone, is_active, source, acccloud_linked_at",
+      {
+        count: "exact",
+      },
+    )
     .order("code");
 
   if (q) query = query.or(`code.ilike.%${q}%,name_th.ilike.%${q}%`);
@@ -67,6 +73,7 @@ export default async function PartnersPage({
                         {typeLabel[p.type as keyof typeof typeLabel]}
                       </Badge>
                       {!p.is_active && <Badge tone="bad">{t("inactive")}</Badge>}
+                      <SourceBadge source={p.source} linkedAt={p.acccloud_linked_at} />
                     </div>
                   </Td>
                   <Td className="text-brand-muted whitespace-nowrap">{p.phone ?? "—"}</Td>

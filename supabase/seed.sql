@@ -123,21 +123,21 @@ insert into departments (code, name_th, name_en) values
 -- Partners
 -- =====================================================================
 
-insert into partners (code, type, name_th, name_en, phone, acccloud_partner_code) values
-  ('SUP-001', 'supplier', 'บริษัท ไทยเคมิคอล ซัพพลาย จำกัด',  'Thai Chemical Supply Co., Ltd.', '02-555-0101', 'V0001'),
-  ('SUP-002', 'supplier', 'บริษัท สยามเรซิน อินดัสทรี จำกัด',  'Siam Resin Industry Co., Ltd.',  '02-555-0102', 'V0002'),
-  ('SUP-003', 'supplier', 'บริษัท เอเชีย แพ็คเกจจิ้ง จำกัด',    'Asia Packaging Co., Ltd.',       '02-555-0103', 'V0003'),
-  ('SUP-004', 'supplier', 'ห้างหุ้นส่วนจำกัด บางกอกโซลเวนท์',   'Bangkok Solvent Ltd., Part.',    '02-555-0104', 'V0004'),
-  ('SUP-005', 'supplier', 'บริษัท นิปปอน แอดดิทีฟ (ไทย) จำกัด', 'Nippon Additive (Thailand)',     '02-555-0105', 'V0005'),
-  ('SUP-006', 'supplier', 'บริษัท พี.เอส. อะไหล่อุตสาหกรรม จำกัด','P.S. Industrial Parts Co., Ltd.','02-555-0106', 'V0006'),
-  ('CUS-001', 'customer', 'บริษัท รุ่งเรืองการช่าง จำกัด',      'Rung Rueang Engineering',        '02-666-0201', 'C0001'),
-  ('CUS-002', 'customer', 'บริษัท ไทยออโต้พาร์ท จำกัด',        'Thai Auto Parts Co., Ltd.',      '02-666-0202', 'C0002'),
-  ('CUS-003', 'customer', 'บริษัท เอส.เค. อุตสาหกรรม จำกัด',   'S.K. Industry Co., Ltd.',        '02-666-0203', 'C0003'),
-  ('CUS-004', 'customer', 'บริษัท โปรเทค โคทติ้ง จำกัด',       'Protech Coating Co., Ltd.',      '02-666-0204', 'C0004'),
-  ('CUS-005', 'customer', 'ร้านค้าปลีก ออนเนสท์ สาขาบางนา',    'Onest Retail - Bangna',          '02-666-0205', 'C0005'),
-  ('CUS-006', 'customer', 'บริษัท เมทัลเวิร์ค เอเชีย จำกัด',    'Metalwork Asia Co., Ltd.',       '02-666-0206', 'C0006'),
-  ('CUS-007', 'customer', 'บริษัท ยูนิตี้ พลาสติก จำกัด',       'Unity Plastic Co., Ltd.',        '02-666-0207', 'C0007'),
-  ('CUS-008', 'customer', 'บริษัท ไทยเพ้นท์ เซ็นเตอร์ จำกัด',   'Thai Paint Center Co., Ltd.',    '02-666-0208', 'C0008');
+insert into partners (code, type, name_th, name_en, phone, acccloud_partner_code, source, acccloud_linked_at) values
+  ('SUP-001', 'supplier', 'บริษัท ไทยเคมิคอล ซัพพลาย จำกัด',  'Thai Chemical Supply Co., Ltd.', '02-555-0101', 'V0001', 'acccloud', now()),
+  ('SUP-002', 'supplier', 'บริษัท สยามเรซิน อินดัสทรี จำกัด',  'Siam Resin Industry Co., Ltd.',  '02-555-0102', 'V0002', 'acccloud', now()),
+  ('SUP-003', 'supplier', 'บริษัท เอเชีย แพ็คเกจจิ้ง จำกัด',    'Asia Packaging Co., Ltd.',       '02-555-0103', 'V0003', 'acccloud', now()),
+  ('SUP-004', 'supplier', 'ห้างหุ้นส่วนจำกัด บางกอกโซลเวนท์',   'Bangkok Solvent Ltd., Part.',    '02-555-0104', 'V0004', 'acccloud', now()),
+  ('SUP-005', 'supplier', 'บริษัท นิปปอน แอดดิทีฟ (ไทย) จำกัด', 'Nippon Additive (Thailand)',     '02-555-0105', 'V0005', 'acccloud', now()),
+  ('SUP-006', 'supplier', 'บริษัท พี.เอส. อะไหล่อุตสาหกรรม จำกัด','P.S. Industrial Parts Co., Ltd.','02-555-0106', 'V0006', 'acccloud', now()),
+  ('CUS-001', 'customer', 'บริษัท รุ่งเรืองการช่าง จำกัด',      'Rung Rueang Engineering',        '02-666-0201', 'C0001', 'acccloud', now()),
+  ('CUS-002', 'customer', 'บริษัท ไทยออโต้พาร์ท จำกัด',        'Thai Auto Parts Co., Ltd.',      '02-666-0202', 'C0002', 'acccloud', now()),
+  ('CUS-003', 'customer', 'บริษัท เอส.เค. อุตสาหกรรม จำกัด',   'S.K. Industry Co., Ltd.',        '02-666-0203', 'C0003', 'acccloud', now()),
+  ('CUS-004', 'customer', 'บริษัท โปรเทค โคทติ้ง จำกัด',       'Protech Coating Co., Ltd.',      '02-666-0204', 'C0004', 'acccloud', now()),
+  ('CUS-005', 'customer', 'ร้านค้าปลีก ออนเนสท์ สาขาบางนา',    'Onest Retail - Bangna',          '02-666-0205', 'C0005', 'acccloud', now()),
+  ('CUS-006', 'customer', 'บริษัท เมทัลเวิร์ค เอเชีย จำกัด',    'Metalwork Asia Co., Ltd.',       '02-666-0206', 'C0006', 'acccloud', now()),
+  ('CUS-007', 'customer', 'บริษัท ยูนิตี้ พลาสติก จำกัด',       'Unity Plastic Co., Ltd.',        '02-666-0207', 'C0007', 'acccloud', now()),
+  ('CUS-008', 'customer', 'บริษัท ไทยเพ้นท์ เซ็นเตอร์ จำกัด',   'Thai Paint Center Co., Ltd.',    '02-666-0208', 'C0008', 'acccloud', now());
 
 -- Consignment sites: our stock, physically at a customer. One location each.
 insert into locations (warehouse_id, zone_id, code, barcode, type, partner_id)
@@ -153,15 +153,19 @@ join partners p on p.code = v.partner_code;
 -- Products (50)
 -- =====================================================================
 
+-- source/acccloud_linked_at: the demo data stands in for records that came
+-- from AccCloud, so it is marked linked. Leaving it 'local' would put the
+-- "awaiting AccCloud link" badge on all 50 SKUs and make the badge meaningless
+-- (D-33).
 insert into products
   (sku, name_th, name_en, category_id, base_uom_id, tracking_mode,
    shelf_life_days, requires_qc, is_consignment_eligible,
-   acccloud_item_code, acccloud_master_id)
+   acccloud_item_code, acccloud_master_id, source, acccloud_linked_at)
 select
   p.sku, p.name_th, p.name_en,
   c.id, u.id, p.tracking::tracking_mode,
   p.shelf_life, p.requires_qc, p.consign,
-  p.sku, p.master_id
+  p.sku, p.master_id, 'acccloud', now()
 from (values
   -- Solvents: lot-tracked drums, QC on receipt, one-year shelf life
   ('RM-SOLV-001','โทลูอีน เกรดอุตสาหกรรม',      'Toluene, industrial grade',     'RM-SOLV','KG','lot',365,true,false,10001),
@@ -223,6 +227,12 @@ from (values
 ) as p(sku, name_th, name_en, cat, uom, tracking, shelf_life, requires_qc, consign, master_id)
 join product_categories c on c.code = p.cat
 join uoms u on u.code = p.uom;
+
+-- One product is deliberately left unlinked so the "awaiting AccCloud link"
+-- badge is visible in the demo rather than only in theory.
+update products
+set source = 'local', acccloud_linked_at = null, acccloud_item_code = null, acccloud_master_id = null
+where sku = 'SP-005';
 
 -- Internal barcodes: one primary per product, in its base unit.
 insert into product_barcodes (product_id, barcode, uom_id, type, is_primary)

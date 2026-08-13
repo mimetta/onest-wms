@@ -806,3 +806,82 @@ Start B (104, `211214`) are easy to swap.
 **Not covered:** GS1 application identifiers and subset switching. If a supplier barcode
 ever needs those, this encoder reads them fine on the scanning side — it only limits what we
 can *print*.
+
+---
+
+## D-33 — AccCloud masters existence and identity; the WMS masters enrichment
+
+**Date:** 2026-08-13 · **Status:** Accepted (owner decision) · **Phase:** 1 (schema and UI), Phase 4 (linking)
+
+**Context.** Both systems can create products and partners. Left alone that is dual-master
+drift: two records for the same drum, and no answer to which one is right.
+
+**Decision.** A split by field, not by record.
+
+| Owned by AccCloud | Owned by the WMS |
+|---|---|
+| Whether a product or partner **exists** | tracking mode, `requires_qc`, shelf life |
+| Product code, names | barcodes, stock rules (min/max) |
+| Partner code, tax data | supplier MOQ, partner notes |
+
+Creating either in the WMS stays possible but requires the new `master_data.create`
+permission, granted to `admin` alone. Such a record is marked `source = 'local'` and wears
+an "awaiting AccCloud link" badge on both list and detail until an import matches it by code
+and stamps `acccloud_linked_at`.
+
+**Reasoning.** The alternative — forbidding WMS creation outright — would block receiving on
+a product accounting has not entered yet, which puts a data-entry queue between a lorry and
+a shelf. The badge keeps the drift visible instead of pretending it cannot happen: everyone
+can see which records accounting does not know about, and the import resolves them.
+
+"Awaiting link" is derived (`source = 'local' AND acccloud_linked_at IS NULL`) rather than a
+third enum value, so the badge cannot disagree with reality.
+
+**Consequences.**
+
+- Editing a linked product's code or names is allowed but futile — the next import
+  overwrites them. The form says so rather than silently letting someone waste the effort.
+- `master_data.write` still covers editing for managers; only creation narrowed.
+- Phase 4's import gains a required link/merge step (recorded in PLAN.md §18.7): match local
+  records to incoming rows by code, stamp `acccloud_linked_at`, and report anything still
+  unmatched rather than leaving it silently local.
+- Locations, zones and departments are unaffected — they are WMS-native and AccCloud has no
+  concept of them.
+
+---
+
+## D-34 — Purchase price is append-only history, and warehouse screens never show it
+
+**Date:** 2026-08-13 · **Status:** Accepted (owner requirement) · **Phase:** 1 (schema), Phase 4 (populating)
+
+**Decision.** Two additions:
+
+- `products.supplier_moq` — an enrichment field, readable by anyone with
+  `master_data.read`, because a minimum order quantity is an operational number a receiver
+  may legitimately need.
+- `product_price_history` — `(product_id, partner_id, price, currency, source, effective_date,
+  created_by)`, **append-only** with the same trigger-and-revoke pattern as the ledger, plus
+  a `product_latest_price` view exposing the most recent row per product and supplier.
+
+Reading either price table requires the new `cost.read` permission: `admin`,
+`warehouse_manager` and `viewer`. Explicitly **not** `warehouse_staff` or `qc`.
+
+**Reasoning.** A price is a fact about a moment. Overwriting last quarter's figure destroys
+the ability to explain a cost change, and the discipline that protects stock history should
+protect cost history — this is the same argument as D-01, applied to a different number.
+
+Keeping cost off warehouse screens is both a confidentiality choice and a focus one: a
+picker does not need to know what a drum cost, and putting it on a scan screen adds a number
+to read at exactly the moment the design is trying to reduce reading to zero.
+
+MOQ sits on `products` rather than behind `cost.read` on purpose — it is a quantity, not a
+price, and hiding it would make receiving worse for no benefit.
+
+**Consequences.** `product_latest_price` uses `DISTINCT ON` with `effective_date DESC,
+created_at DESC`, so two prices sharing an effective date resolve to the later entry — which
+is the correction. Nothing writes to these tables yet; Phase 4 supplies the import path and a
+manual entry form behind `cost.write`.
+
+**Open, not assumed:** whether AccCloud exposes MOQ or purchase price at all. Recorded as a
+question in PLAN.md §18.4 rather than designed around a guess. If the API does not expose
+them, CSV import and manual entry are the paths.

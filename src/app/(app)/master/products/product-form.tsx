@@ -10,6 +10,7 @@ import {
   Field,
   Input,
   LinkButton,
+  SectionLabel,
   Select,
 } from "@/components/ui";
 import { createProduct, updateProduct, type ProductFormState } from "./actions";
@@ -26,7 +27,10 @@ export type ProductValues = {
   requires_qc: boolean;
   is_consignment_eligible: boolean;
   acccloud_item_code: string;
+  supplier_moq: string;
   is_active: boolean;
+  source: string;
+  acccloud_linked_at: string | null;
 };
 
 export function ProductForm({
@@ -35,6 +39,7 @@ export function ProductForm({
   uoms,
   trackingEditable,
   created,
+  identityEditable = true,
 }: {
   values: ProductValues;
   categories: { id: string; name_th: string }[];
@@ -42,6 +47,8 @@ export function ProductForm({
   /** False once the product has stock movements — tracking_mode is frozen (D-12). */
   trackingEditable: boolean;
   created?: boolean;
+  /** False for non-admins: AccCloud masters identity, we master enrichment. */
+  identityEditable?: boolean;
 }) {
   const t = useTranslations("master");
   const tc = useTranslations("common");
@@ -64,6 +71,14 @@ export function ProductForm({
       {created && <Banner tone="good">{t("createdOk")}</Banner>}
       {state.error && <Banner tone="bad">{t(state.error)}</Banner>}
 
+      {/* Two different warnings, never both: either this record is not known to
+          AccCloud yet, or it is and its identity fields are not ours to own. */}
+      {values.source === "local" && !values.acccloud_linked_at ? (
+        <Banner tone="warn">{t("sourceLocalHint")}</Banner>
+      ) : (
+        values.id && <Banner tone="info">{t("identityFromAcccloud")}</Banner>
+      )}
+
       <Card className="flex flex-col gap-4 px-6 py-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t("sku")}>
@@ -72,6 +87,7 @@ export function ProductForm({
               defaultValue={values.sku}
               required
               autoFocus={isNew}
+              readOnly={!identityEditable}
               className="font-mono"
             />
           </Field>
@@ -139,6 +155,23 @@ export function ProductForm({
               defaultValue={values.shelf_life_days}
             />
           </Field>
+        </div>
+
+        <div className="border-brand-border flex flex-col gap-4 border-t pt-4">
+          <SectionLabel>{t("enrichmentSection")}</SectionLabel>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={t("supplierMoq")} hint={t("supplierMoqHint")}>
+              <Input
+                name="supplier_moq"
+                type="number"
+                min={0}
+                step="any"
+                inputMode="decimal"
+                defaultValue={values.supplier_moq}
+              />
+            </Field>
+          </div>
         </div>
 
         <div className="border-brand-border flex flex-col gap-3 border-t pt-4">

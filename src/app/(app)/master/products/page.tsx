@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { getTranslations } from "next-intl/server";
-import { requirePerm } from "@/lib/auth";
+import { can, requirePerm } from "@/lib/auth";
+import { SourceBadge } from "@/components/source-badge";
 import { createClient } from "@/lib/supabase/server";
 import { SearchBox } from "@/components/search-box";
 import {
@@ -22,7 +23,7 @@ export default async function ProductsPage({
 }: {
   searchParams: Promise<{ q?: string; page?: string }>;
 }) {
-  await requirePerm("master_data.write");
+  const user = await requirePerm("master_data.write");
   const t = await getTranslations("master");
   const { q, page } = await searchParams;
   const supabase = await createClient();
@@ -33,7 +34,7 @@ export default async function ProductsPage({
   let query = supabase
     .from("products")
     .select(
-      "id, sku, name_th, name_en, tracking_mode, requires_qc, is_active, uoms(code), product_categories(name_th)",
+      "id, sku, name_th, name_en, tracking_mode, requires_qc, is_active, source, acccloud_linked_at, uoms(code), product_categories(name_th)",
       { count: "exact" },
     )
     .order("sku")
@@ -59,9 +60,13 @@ export default async function ProductsPage({
         title={t("products")}
         subtitle={t("count", { count: count ?? 0 })}
         action={
-          <LinkButton href="/master/products/new" variant="primary">
-            {t("new")}
-          </LinkButton>
+          // AccCloud is the system of record for existence, so creating a
+          // product here is an admin escape hatch, not the normal path (D-33).
+          can(user, "master_data.create") ? (
+            <LinkButton href="/master/products/new" variant="primary">
+              {t("new")}
+            </LinkButton>
+          ) : undefined
         }
       />
 
@@ -108,7 +113,8 @@ export default async function ProductsPage({
                         <Badge tone={p.tracking_mode === "none" ? "neutral" : "info"}>
                           {trackingLabel[p.tracking_mode as keyof typeof trackingLabel]}
                         </Badge>
-                        {p.requires_qc && <Badge tone="warn">QC</Badge>}
+                        {p.requires_qc && <Badge tone="info">QC</Badge>}
+                        <SourceBadge source={p.source} linkedAt={p.acccloud_linked_at} />
                         {!p.is_active && <Badge tone="bad">{t("inactive")}</Badge>}
                       </div>
                     </Td>

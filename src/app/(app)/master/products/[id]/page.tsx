@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
-import { requirePerm } from "@/lib/auth";
+import { can, requirePerm } from "@/lib/auth";
+import { PriceHistory } from "../price-history";
 import { createClient } from "@/lib/supabase/server";
 import { Badge, Card, PageHeader, SectionLabel } from "@/components/ui";
 import { ProductForm } from "../product-form";
@@ -9,7 +10,7 @@ export default async function EditProductPage({
   params,
   searchParams,
 }: PageProps<"/master/products/[id]">) {
-  await requirePerm("master_data.write");
+  const user = await requirePerm("master_data.write");
   const { id } = await params;
   const { created } = await searchParams;
   const t = await getTranslations("master");
@@ -55,13 +56,20 @@ export default async function EditProductPage({
           requires_qc: product.requires_qc,
           is_consignment_eligible: product.is_consignment_eligible,
           acccloud_item_code: product.acccloud_item_code ?? "",
+          supplier_moq: product.supplier_moq?.toString() ?? "",
           is_active: product.is_active,
+          source: product.source,
+          acccloud_linked_at: product.acccloud_linked_at,
         }}
         categories={categories ?? []}
         uoms={uoms ?? []}
         trackingEditable={trackingEditable}
+        identityEditable={can(user, "master_data.create")}
         created={created === "1"}
       />
+
+      {/* Cost is admin/manager/viewer only — never on a warehouse screen (D-34). */}
+      {can(user, "cost.read") && <PriceHistory productId={id} />}
 
       <Card className="flex flex-col gap-3 px-6 py-5">
         <SectionLabel>{t("barcodes")}</SectionLabel>

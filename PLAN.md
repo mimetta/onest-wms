@@ -1011,6 +1011,36 @@ arrives from AccCloud, every product needs one from us:
    asserts they agree on first import and refuses to commit if they do not; one real
    response from each endpoint settles it in a minute.
 
+### 18.4b Purchase pricing and MOQ — endpoints unknown
+
+Added 2026-08-13 with D-34. The schema exists (`products.supplier_moq`,
+`product_price_history`); what feeds it does not.
+
+**To check on AccCloud's api-document pages before building the Phase 4 importer:**
+
+1. Is there a purchase-price or price-list endpoint, and does it give price per supplier per
+   product, or only a single list price?
+2. Does anything expose a minimum order quantity?
+3. If prices exist, do they carry an effective date? Without one, an import can only record
+   "as at the import date", which weakens the history.
+
+**If the answer is no on all three**, the paths are CSV import and a manual entry form behind
+`cost.write`. That is the assumption to plan against — an API that turns out to exist is a
+bonus, whereas designing for one that does not is rework.
+
+### 18.7 Local-record linking — required import step
+
+Added 2026-08-13 with D-33. The import must, before committing:
+
+1. Match WMS records with `source = 'local'` against incoming AccCloud rows **by code**
+   (`acccloud_item_code` / `acccloud_partner_code`).
+2. On a match: set `source = 'acccloud'`, stamp `acccloud_linked_at`, and take AccCloud's
+   identity fields — leaving every WMS-owned enrichment field untouched.
+3. **Report anything still unmatched** in the diff preview as its own category. A local
+   record that never links is a real operational signal — either accounting has not entered
+   it, or the codes disagree — and it must be visible rather than quietly staying local
+   forever.
+
 ### 18.5 Adapter requirements — consolidated
 
 - One `ErpAdapter` interface, two implementations (CSV, API). Both feed the same

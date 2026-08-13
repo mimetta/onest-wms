@@ -28,6 +28,8 @@ function readForm(formData: FormData) {
     requires_qc: formData.get("requires_qc") === "on",
     is_consignment_eligible: formData.get("is_consignment_eligible") === "on",
     acccloud_item_code: str("acccloud_item_code"),
+    // Enrichment the WMS owns: AccCloud may never supply it (D-33, D-34).
+    supplier_moq: num("supplier_moq"),
     is_active: formData.get("is_active") === "on",
   };
 }
