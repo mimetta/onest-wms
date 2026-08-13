@@ -624,3 +624,106 @@ describe("the whole loop", () => {
     });
   });
 });
+
+/**
+ * The workflow RPCs.
+ *
+ * These exist because RLS deliberately forbids a direct UPDATE past `draft`
+ * (D-38), so without them nothing could ever reach `approved` and therefore
+ * nothing could be posted. That gap survived Phase 0 unnoticed because no UI
+ * had tried to post yet — hence these tests.
+ */
+describe("document workflow RPCs", () => {
+  async function draftAdjustment(db: Db, w: World) {
+    const adj = await db.value(
+      `insert into adjustments (warehouse_id, reason_code_id, status, created_by)
+       values ($1, $2, 'draft', $3) returning id`,
+      [w.wh, w.reasons.found, w.users.admin],
+    );
+    await db.query(
+      `insert into adjustment_lines
+         (header_id, line_no, product_id, qty, uom_id, to_location_id)
+       values ($1, 1, $2, 3, $3, $4)`,
+      [adj, w.products.untracked, w.uoms.pcs, w.locations.storage],
+    );
+    return adj;
+  }
+
+  it("walks a draft through submitted on the way to approved", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      await db.actAs(w.users.admin);
+      const adj = await draftAdjustment(db, w);
+
+      await db.query("select approve_document('adjustment', $1)", [adj]);
+
+      const row = await db.one(
+        `select status::text, submitted_at is not null as submitted,
+                approved_at is not null as approved
+           from adjustments where id = $1`,
+        [adj],
+      );
+      expect(row.status).toBe("approved");
+      // Both stamps set: the document passed through submitted rather than
+      // jumping the workflow.
+      expect(row.submitted).toBe(true);
+      expect(row.approved).toBe(true);
+    });
+  });
+
+  it("lets an approved document post", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      await db.actAs(w.users.admin);
+      const adj = await draftAdjustment(db, w);
+
+      await db.query("select approve_document('adjustment', $1)", [adj]);
+      const docNo = await db.post("adjustment", adj);
+      expect(docNo).toMatch(/^AJ-\d{4}-\d{5}$/);
+    });
+  });
+
+  it("refuses to approve without the permission", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      await db.actAs(w.users.admin);
+      const adj = await draftAdjustment(db, w);
+
+      // warehouse_staff can create an adjustment but not approve one.
+      await db.actAs(w.users.staff);
+      const msg = await db.expectError(() =>
+        db.query("select approve_document('adjustment', $1)", [adj]),
+      );
+      expect(msg).toContain("adjustment.approve");
+    });
+  });
+
+  it("refuses to cancel a posted document", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      await db.actAs(w.users.admin);
+      const adj = await draftAdjustment(db, w);
+
+      await db.query("select approve_document('adjustment', $1)", [adj]);
+      await db.post("adjustment", adj);
+
+      const msg = await db.expectError(() =>
+        db.query("select cancel_document('adjustment', $1, 'changed my mind')", [adj]),
+      );
+      expect(msg).toContain("reversing document");
+    });
+  });
+
+  it("requires a reason to cancel", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      await db.actAs(w.users.admin);
+      const adj = await draftAdjustment(db, w);
+
+      const msg = await db.expectError(() =>
+        db.query("select cancel_document('adjustment', $1, '')", [adj]),
+      );
+      expect(msg).toContain("reason is required");
+    });
+  });
+});

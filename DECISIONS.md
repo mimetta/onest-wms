@@ -1019,3 +1019,43 @@ via `Intl` (expiry 11 ส.ค. 2571), which satisfies the brief's BE requirement
 documents. It is currently automatic for the `th` locale rather than driven by the
 `buddhist_era_display` setting created in Phase 0. Worth deciding whether that setting should
 override the locale default, or be removed as redundant.
+
+---
+
+## D-38 — The document workflow RPCs, missing since Phase 0
+
+**Date:** 2026-08-13 · **Status:** Accepted · **Phase:** 1
+**Completes:** the design stated in PLAN.md §10
+
+**Context.** Found while building the receiving screen: posting a goods receipt failed, and
+the cause was not in the screen.
+
+PLAN.md §10 said "status transitions go through RPCs (`submit_document`,
+`approve_document`, `cancel_document`), never a direct `UPDATE`", and the RLS policies were
+written to enforce exactly that — a document row is updatable only while `draft`, and the
+`WITH CHECK` refuses any status beyond `submitted`. **The policies shipped. The RPCs did
+not.** Nothing could legally reach `approved`, so nothing could ever be posted.
+
+**Why it survived Phase 0.** Every Phase 0 test inserts documents with `status: 'approved'`
+directly, as the `postgres` role, which is not subject to RLS. The tests were right about
+what they tested — posting — and blind to how a real user would get a document into a
+postable state. No UI had tried yet.
+
+**Decision.** Three `SECURITY DEFINER` functions completing the design, each checking its own
+permission: `submit_document`, `approve_document`, `cancel_document`.
+
+`approve_document` accepts a draft and **walks it through `submitted`** rather than jumping
+straight to `approved`. The workflow trigger permits only draft → submitted → approved, and
+that strictness is worth keeping — it is what stops a bug elsewhere inventing a new path
+through the lifecycle. Two updates also produce the honest audit trail: a goods receipt has
+no separate approver (D-22), but it was still submitted and then approved, a moment apart,
+by the same person.
+
+**Consequences.**
+
+- Five regression tests now cover the RPCs, including that `warehouse_staff` cannot approve
+  an adjustment and that a posted document cannot be cancelled.
+- The general lesson is recorded here rather than left implicit: **a test that sets up state
+  as `postgres` proves the operation, not the path to it.** Anywhere RLS shapes a workflow,
+  something must exercise the workflow as a real role. Worth applying to Phase 2's issue and
+  transfer screens before they are built rather than after.
