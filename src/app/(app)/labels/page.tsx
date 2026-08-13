@@ -76,11 +76,13 @@ export default async function LabelsPage({
   }
 
   if (kind === "lot") {
-    note = t("lotNote");
+    note = `${t("lotNote")} ${t("qcBoxNote")}`;
     const { data } = await supabase
       .from("lots")
+      // qc_status is read for the PICKER list only, so an operator can see what
+      // they are printing. It is deliberately not printed on the label (D-37).
       .select(
-        "id, lot_no, mfg_date, expiry_date, qc_status, qc_at, created_at, products(sku, name_th), qc_by_profile:user_profiles!lots_qc_by_fkey(full_name)",
+        "id, lot_no, mfg_date, expiry_date, qc_status, created_at, products(sku, name_th)",
       )
       .order("created_at", { ascending: false })
       .limit(300);
@@ -94,7 +96,6 @@ export default async function LabelsPage({
 
     items = (data ?? []).map((l) => {
       const product = l.products as unknown as { sku: string; name_th: string } | null;
-      const decidedBy = l.qc_by_profile as unknown as { full_name: string } | null;
 
       const fields = [
         { label: "SKU", value: product?.sku ?? "—" },
@@ -114,13 +115,8 @@ export default async function LabelsPage({
           ? [{ label: t("expiry"), value: dateOnly(l.expiry_date) }]
           : [],
         fields,
-        qc: {
-          status: l.qc_status,
-          statusLabel: tq(l.qc_status),
-          decidedBy: decidedBy?.full_name,
-          decidedAt: l.qc_at ? dateOnly(l.qc_at) : undefined,
-          caveat: t("qcSnapshot"),
-        },
+        // The label gets an empty box to tick by hand — never the status.
+        qcBox: true as const,
         hint: tq(l.qc_status),
       };
     });

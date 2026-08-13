@@ -70,32 +70,32 @@ function LabelCell({ label, size }: { label: LabelSpec; size: LabelSize }) {
           ))}
         </div>
 
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-0.5">
           <Barcode value={label.barcode} heightMm={22} />
           <div className="text-center font-mono text-[11pt] tracking-tight text-black">
             {label.primary}
           </div>
+          {/* Printed in Thai regardless of the operator's UI language: the
+              label is read in the warehouse, and an English-speaking admin
+              printing a sheet must not produce labels their staff cannot
+              read (D-37). */}
+          <div className="text-center text-[8pt] text-neutral-600">
+            สแกนเพื่อดูข้อมูลล่าสุด
+          </div>
         </div>
 
-        {label.qc ? (
-          <div className="border-t-2 border-black pt-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="text-[9pt] text-neutral-600">QC</span>
-              <span className="text-[14pt] leading-none font-bold text-black">
-                {label.qc.statusLabel}
-              </span>
-            </div>
-            {(label.qc.decidedBy || label.qc.decidedAt) && (
-              <div className="mt-0.5 flex justify-between gap-2 text-[8pt] text-neutral-700">
-                <span>{label.qc.decidedBy ?? ""}</span>
-                <span>{label.qc.decidedAt ?? ""}</span>
-              </div>
-            )}
-            {/* The printed status can go stale the moment QC changes its mind.
-                Saying so on the label is cheaper than a wrong assumption. */}
-            <div className="mt-0.5 text-[6.5pt] leading-tight text-neutral-500">
-              {label.qc.caveat}
-            </div>
+        {label.qcBox ? (
+          <div className="flex items-center gap-3 border-t-2 border-black pt-2">
+            {/* An EMPTY box, ticked by hand. Nothing about the current QC
+                state is printed, because a printed status is a second source
+                of truth that goes stale the moment QC changes its mind. */}
+            <span
+              aria-hidden
+              className="inline-block h-[10mm] w-[10mm] shrink-0 border-[0.6mm] border-black"
+            />
+            <span className="text-[13pt] leading-tight font-bold text-black">
+              ตรวจ QC แล้ว
+            </span>
           </div>
         ) : null}
       </div>

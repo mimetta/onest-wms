@@ -9,7 +9,6 @@ import {
   LABEL_SIZES,
   sizesFor,
   type LabelKind,
-  type LabelQc,
   type LabelSpec,
 } from "@/lib/labels/types";
 
@@ -22,7 +21,7 @@ export type PickableItem = {
   details?: { label: string; value: string }[];
   /** Larger fields for the 100x150 drum label. */
   fields?: { label: string; value: string }[];
-  qc?: LabelQc;
+  qcBox?: true;
   /** True when this row had no barcode row of its own. */
   synthesised?: boolean;
   /** Short right-aligned note in the picker list, e.g. QC status. */
@@ -59,7 +58,7 @@ export function LabelPicker({
           secondary: i.secondary,
           details: i.details,
           fields: i.fields,
-          qc: i.qc,
+          qcBox: i.qcBox,
         })),
     [items, selected, kind],
   );

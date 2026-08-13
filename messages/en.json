@@ -227,10 +227,10 @@
     "shelfNote": "Products with no barcode get one label on the shelf edge, not a sticker on every piece.",
     "lotNote": "Lot labels are the primary scan target: one per drum or handling unit.",
     "printLabel": "Print label",
-    "qcSnapshot": "Printed QC status is a snapshot from print time. The scan is the source of truth.",
     "receivedDate": "Received",
     "hasFactoryBarcode": "Factory barcode",
-    "noBarcodeShelf": "No barcode – use a shelf label"
+    "noBarcodeShelf": "No barcode – use a shelf label",
+    "qcBoxNote": "Labels print identity and an empty QC tick box only. Current QC status comes from scanning, never from the label."
   },
   "scan": {
     "title": "Scan",

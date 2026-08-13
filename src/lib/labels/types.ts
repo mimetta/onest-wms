@@ -15,21 +15,18 @@ export type LabelKind = "product" | "shelf" | "lot" | "location";
 export type LabelField = { label: string; value: string };
 
 /**
- * QC block for a drum label.
+ * The QC mark on a drum label is an EMPTY CHECKBOX, ticked by hand with a pen
+ * when QC passes (D-37). No status text, no name, no date is printed.
  *
- * IMPORTANT: this is a SNAPSHOT of what the database knew when the label was
- * printed. A lot can fail QC after its label is stuck on the drum, so the
- * printed status is an aid, never the authority — the scan is (D-35). The
- * template prints that caveat on the label itself.
+ * Printing the status would create a second source of truth that goes stale the
+ * moment QC changes its mind — and a wrong label is more dangerous than no
+ * label, because people believe it. A blank box cannot be wrong: either someone
+ * ticked it or they did not, and the system holds the detail.
+ *
+ * This type carries no data on purpose. It exists so a caller can say "this
+ * label gets the QC box" without being able to put anything in it.
  */
-export type LabelQc = {
-  status: string;
-  statusLabel: string;
-  decidedBy?: string;
-  decidedAt?: string;
-  /** Localised "printed status is a snapshot" caveat. */
-  caveat: string;
-};
+export type LabelQcBox = true;
 
 export type LabelSpec = {
   kind: LabelKind;
@@ -42,7 +39,8 @@ export type LabelSpec = {
   details?: LabelField[];
   /** Larger fields for the 100x150 drum label. */
   fields?: LabelField[];
-  qc?: LabelQc;
+  /** Print the empty hand-tick QC box (drum labels only). */
+  qcBox?: LabelQcBox;
 };
 
 export type LabelSize = {

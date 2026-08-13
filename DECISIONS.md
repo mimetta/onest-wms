@@ -961,3 +961,51 @@ use. Wedge scanners decode in hardware, so none of this applies to them: they si
 
 **Verified:** nothing in the scan path assumes Code 128 format or length. The Code 128
 encoder is used only for *printing* our own labels, never for reading.
+
+---
+
+## D-37 — The printed label carries identity and a hand-tick box; the scan carries status
+
+**Date:** 2026-08-13 · **Status:** Accepted (owner decision) · **Phase:** 1
+**Supersedes:** the QC-block design in D-35
+
+**Context.** The first drum label design printed the QC status, who decided it and when, with
+a "this is a snapshot" caveat underneath. That is honest but still wrong-shaped: it puts a
+copy of a mutable fact onto an immutable surface.
+
+**Decision.** The 100 × 150 mm drum label prints:
+
+- product name (TH), SKU, lot number, expiry date, received date
+- the Code 128 lot barcode with the lot number beneath it
+- **an empty checkbox labelled ตรวจ QC แล้ว**, ticked by hand with a pen when QC passes
+- a one-line hint under the barcode: **สแกนเพื่อดูข้อมูลล่าสุด**
+
+No status text, no name, no date of decision. Full QC detail lives in the system and is
+reached by scanning.
+
+**Reasoning.** A printed status goes stale the moment QC changes its mind, and **a wrong
+label is more dangerous than no label, because people believe it.** A blank box cannot be
+wrong: either someone ticked it or they did not. It also matches what the warehouse already
+does with paper — a tick is a familiar, fast, unambiguous mark that needs no reprint.
+
+This removes a whole workflow rather than adding one: D-35's "print an updated label after
+the QC decision" is no longer needed, because the label was never carrying the decision. One
+label per drum, printed once at receiving, correct for the life of the drum.
+
+**Consequences.**
+
+- `LabelQcBox` deliberately carries **no data**. A caller can ask for the box but cannot put
+  anything in it, so the design cannot drift back toward printing status.
+- QC status is still read on the label *picker* screen, as a hint about what you are
+  printing. It never reaches the label itself.
+- Both strings print in **Thai regardless of the operator's UI language**. The label is read
+  in the warehouse; an English-speaking admin printing a sheet must not produce labels the
+  staff who handle the drums cannot read.
+- Screen 1.6 still benefits from a reprint action for damaged or lost labels, but it is no
+  longer required for correctness.
+
+**Related observation, not yet a decision.** Thai-locale dates already render in Buddhist era
+via `Intl` (expiry 11 ส.ค. 2571), which satisfies the brief's BE requirement for printed
+documents. It is currently automatic for the `th` locale rather than driven by the
+`buddhist_era_display` setting created in Phase 0. Worth deciding whether that setting should
+override the locale default, or be removed as redundant.
