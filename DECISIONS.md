@@ -770,3 +770,39 @@ correct.
 **Consequences.** Any new code that needs a Bangkok calendar date must call `bkk_today()` or
 format through next-intl. `new Date().getDate()` on the server is a bug, and will be wrong
 by a day for seven hours out of every twenty-four.
+
+---
+
+## D-32 — The Code 128 encoder is ours, not a dependency
+
+**Date:** 2026-08-13 · **Status:** Accepted · **Phase:** 1
+
+**Context.** Screen 1.3 needs Code 128 barcodes on printable labels. The obvious move is
+`jsbarcode` or `bwip-js`.
+
+**Decision.** A ~90-line Code 128 subset B encoder in `src/lib/labels/code128.ts`, producing
+module widths, with SVG rendering layered on top.
+
+**Reasoning.** The popular libraries render into a DOM node or a canvas, which is awkward
+from a Server Component and gives us a *picture* when what the design needs is *data*. The
+label service is deliberately split so a ZPL/Zebra driver can be added later without
+touching callers — and a ZPL driver wants the encoded values, not an SVG. Owning the
+encoding means both renderers read from the same source of truth.
+
+Subset B only: it covers ASCII 32–126, which is every character our SKUs, lot numbers and
+bin codes use. Subset C would pack digit pairs more tightly but buys nothing at these
+lengths.
+
+**Consequences.** Correctness is on us, so it is tested harder than anything else in the UI:
+structural tests against the specification, plus a round-trip decode using an independently
+transcribed pattern table and a recomputed check digit. That decoder deliberately does not
+import the encoder's table — otherwise a corrupted table would validate its own output.
+
+A barcode that looks right and scans wrong is the failure mode that matters here, because it
+surfaces in the warehouse as "the scanner is broken" rather than as a bug report. Writing the
+first test caught a real transposition in my own expectation: Start A (103, `211412`) and
+Start B (104, `211214`) are easy to swap.
+
+**Not covered:** GS1 application identifiers and subset switching. If a supplier barcode
+ever needs those, this encoder reads them fine on the scanning side — it only limits what we
+can *print*.

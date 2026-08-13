@@ -180,5 +180,28 @@
     "zoneCode": "Zone code",
     "inZone": "Zone",
     "blocksConsumption": "Blocks issue and delivery"
+  },
+  "labels": {
+    "title": "Labels",
+    "subtitle": "Print barcode labels for products, lots and locations",
+    "kindProduct": "Product labels",
+    "kindLot": "Lot labels",
+    "kindLocation": "Location labels",
+    "selectItems": "Choose what to print",
+    "selected": "{count} selected",
+    "selectAll": "Select all",
+    "clearSelection": "Clear selection",
+    "labelSize": "Label size",
+    "print": "Print",
+    "preview": "Print preview",
+    "nothingSelected": "Nothing selected",
+    "nothingSelectedHint": "Pick at least one item to print labels for",
+    "sheetHint": "Laid out on A4 · {perSheet} per sheet",
+    "printHint": "Printer settings: A4, margins none, headers and footers off",
+    "expiry": "Expiry",
+    "mfg": "Made",
+    "lot": "Lot",
+    "unit": "Unit",
+    "noBarcodeWarning": "This product has no barcode yet — its SKU will be used instead"
   }
 }
