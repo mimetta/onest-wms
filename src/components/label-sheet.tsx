@@ -85,17 +85,39 @@ function LabelCell({ label, size }: { label: LabelSpec; size: LabelSize }) {
         </div>
 
         {label.qcBox ? (
-          <div className="flex items-center gap-3 border-t-2 border-black pt-2">
-            {/* An EMPTY box, ticked by hand. Nothing about the current QC
-                state is printed, because a printed status is a second source
-                of truth that goes stale the moment QC changes its mind. */}
-            <span
-              aria-hidden
-              className="inline-block h-[10mm] w-[10mm] shrink-0 border-[0.6mm] border-black"
-            />
-            <span className="text-[13pt] leading-tight font-bold text-black">
-              ตรวจ QC แล้ว
-            </span>
+          /* A blank form completed by pen when QC passes. Nothing about the
+             current QC state is printed: a printed status is a second source of
+             truth that goes stale the moment QC changes its mind (D-37).
+
+             Sizes are in millimetres rather than points because these are
+             writing targets, not type — the box and the rules have to be big
+             enough for a gloved hand with a marker pen. */
+          <div className="flex flex-col gap-[2mm] border-t-2 border-black pt-[2mm]">
+            <div className="flex items-center gap-3">
+              <span
+                aria-hidden
+                className="inline-block h-[10mm] w-[10mm] shrink-0 border-[0.6mm] border-black"
+              />
+              <span className="text-[13pt] leading-tight font-bold text-black">
+                ตรวจ QC แล้ว
+              </span>
+            </div>
+
+            {/* Ruled lines at 7mm clear height — above the 6mm minimum, so the
+                rule sits below the writing rather than through it. */}
+            {/* Fixed label width so both rules start at the same x — they are
+                a form to write on, and ragged rules read as a mistake. */}
+            {["ตรวจโดย", "วันที่"].map((caption) => (
+              <div key={caption} className="flex items-end gap-2">
+                <span className="w-[18mm] shrink-0 text-[10pt] text-black">
+                  {caption}
+                </span>
+                <span
+                  aria-hidden
+                  className="h-[7mm] min-w-0 flex-1 border-b-[0.4mm] border-black"
+                />
+              </div>
+            ))}
           </div>
         ) : null}
       </div>

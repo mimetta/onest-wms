@@ -977,11 +977,21 @@ copy of a mutable fact onto an immutable surface.
 
 - product name (TH), SKU, lot number, expiry date, received date
 - the Code 128 lot barcode with the lot number beneath it
-- **an empty checkbox labelled ตรวจ QC แล้ว**, ticked by hand with a pen when QC passes
+- a **blank QC block completed by pen** when QC passes:
+  - an empty checkbox labelled **ตรวจ QC แล้ว**
+  - a ruled line **ตรวจโดย ________** for the inspector's name
+  - a ruled line **วันที่ ________** for the date
 - a one-line hint under the barcode: **สแกนเพื่อดูข้อมูลล่าสุด**
 
-No status text, no name, no date of decision. Full QC detail lives in the system and is
+No status text, no name, no date is *printed*. Full QC detail lives in the system and is
 reached by scanning.
+
+The block is sized for handwriting rather than for reading: the checkbox is 10 mm square and
+each rule has 7 mm of clear height — above the 6 mm minimum, so the rule sits below the
+writing rather than through it. Those dimensions are expressed in millimetres in the
+template, not points, because they are writing targets rather than type. Both captions share
+a fixed width so the two rules start at the same x: a form with ragged rules reads as a
+mistake.
 
 **Reasoning.** A printed status goes stale the moment QC changes its mind, and **a wrong
 label is more dangerous than no label, because people believe it.** A blank box cannot be

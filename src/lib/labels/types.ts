@@ -15,8 +15,9 @@ export type LabelKind = "product" | "shelf" | "lot" | "location";
 export type LabelField = { label: string; value: string };
 
 /**
- * The QC mark on a drum label is an EMPTY CHECKBOX, ticked by hand with a pen
- * when QC passes (D-37). No status text, no name, no date is printed.
+ * The QC block on a drum label is a BLANK FORM completed by pen when QC passes
+ * (D-37): an empty checkbox plus ruled lines for the inspector's name and the
+ * date. No status text, no name, no date is printed.
  *
  * Printing the status would create a second source of truth that goes stale the
  * moment QC changes its mind — and a wrong label is more dangerous than no

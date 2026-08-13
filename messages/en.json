@@ -230,7 +230,7 @@
     "receivedDate": "Received",
     "hasFactoryBarcode": "Factory barcode",
     "noBarcodeShelf": "No barcode – use a shelf label",
-    "qcBoxNote": "Labels print identity and an empty QC tick box only. Current QC status comes from scanning, never from the label."
+    "qcBoxNote": "Labels print identity plus a blank QC block to complete by pen (tick, inspector, date). Current QC status comes from scanning, never from the label."
   },
   "scan": {
     "title": "Scan",
