@@ -1059,3 +1059,69 @@ by the same person.
   as `postgres` proves the operation, not the path to it.** Anywhere RLS shapes a workflow,
   something must exercise the workflow as a real role. Worth applying to Phase 2's issue and
   transfer screens before they are built rather than after.
+
+---
+
+## D-39 — A QC write-off is raised by QC and approved by a manager
+
+**Date:** 2026-08-14 · **Status:** Accepted · **Phase:** 1
+**Implements:** the two-person check chosen in D-20
+
+**Context.** Building the QC screen's write-off button, the obvious implementation was one
+click: create the adjustment, approve it, post it. It failed, and the failure was correct.
+
+D-20 gave `qc` both `adjustment.create` and `adjustment.post` — so QC can raise and post its
+own write-off — but deliberately withheld `adjustment.approve`, keeping a second pair of
+eyes on destroying stock.
+
+**Decision.** The write-off action adapts to who is using it:
+
+- **`qc`** raises the write-off; it is left `submitted` and waits for a manager. The button
+  says so *before* the click, and the confirmation afterwards says "waiting for approval",
+  not "written off".
+- **`admin`**, holding all three permissions, approves and posts immediately.
+
+**Reasoning.** The two alternatives were both worse. Granting QC self-approval would quietly
+undo a control the owner chose, in a commit about a screen. Showing a success message for a
+write-off that has not happened would be a lie a warehouse would act on — someone would move
+the drum.
+
+Nothing unsafe waits on the approval: the lot is already `failed`, so it is unissuable
+everywhere (D-14). Only the paperwork that removes it from the shelf is pending.
+
+**Consequences.** A failed lot's disposal needs two people, which is slower. If that proves
+too slow in practice, the fix is the one D-20 already identified — grant
+`warehouse_manager` the `lot.dispose_unpassed` permission so managers can raise write-offs
+too — and remains a seed change, not a migration.
+
+Half-built adjustments are discarded on any failure before posting. A draft nobody raised on
+purpose is noise in exactly the list where a manager looks for real write-offs to approve. An
+*approved* document that failed to post is left alone: that is a real state worth seeing and
+retrying, not something to erase.
+
+---
+
+## D-40 — New tables and views need their own grants
+
+**Date:** 2026-08-14 · **Status:** Accepted · **Phase:** 1
+
+**Context.** The QC queue rendered empty against a database with three lots waiting. The view
+was correct, RLS was correct, and the query returned zero rows.
+
+Migration 0011 ran `grant select on all tables in schema public to authenticated`, which
+applies only to objects existing **at that moment**. `lot_qc_queue` was created in 0016 and
+had no grant, so PostgREST returned an empty set.
+
+**Decision.** Every migration that creates a table or view grants access in the same file.
+`product_latest_price` (migration 0014) had the same defect and was fixed at the same time,
+before it could surface in Phase 4.
+
+**Reasoning.** This failure mode deserves recording because of *how* it fails: not with a
+permission error, but with **success and zero rows**. A missing grant looks exactly like an
+empty table, which is why it cost a debugging cycle here and would have cost another in Phase
+4. Anything that fails silently is worth a written rule.
+
+**Consequences.** Worth a line on the review checklist for every future migration: does this
+file create a relation, and if so does it grant on it? Postgres has `alter default
+privileges` for this, but it applies per creating-role and is easy to get subtly wrong —
+an explicit grant next to the object is harder to misread.

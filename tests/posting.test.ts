@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { withRollback } from "./helpers/db";
-import { giveStock, makeLot, seedWorld } from "./helpers/fixtures";
+import { withRollback, type Db } from "./helpers/db";
+import { giveStock, makeLot, seedWorld, type World } from "./helpers/fixtures";
 
 /**
  * These are the cases that the first design got wrong. Every one of them

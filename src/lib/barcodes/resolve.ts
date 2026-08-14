@@ -26,6 +26,8 @@ export type ScanResolution =
       uomCode: string;
       barcodeType: string;
       matchedBarcode: string;
+      /** False when the SKU itself was scanned — i.e. a shelf label (D-35). */
+      hasOwnBarcode: boolean;
     }
   | {
       kind: "location";
@@ -98,8 +100,40 @@ export async function resolveBarcode(raw: string): Promise<ScanResolution> {
         uomCode: uom?.code ?? "",
         barcodeType: barcode.type,
         matchedBarcode: barcode.barcode,
+        hasOwnBarcode: true,
       };
     }
+  }
+
+  // Shelf-edge labels encode the SKU (D-35). Checking this before locations
+  // costs one query and is what makes "scan the shelf label, type the quantity"
+  // work for products that will never have a barcode of their own.
+  const { data: bySku } = await supabase
+    .from("products")
+    .select("id, sku, name_th, tracking_mode, requires_qc, base_uom_id, is_active")
+    .eq("sku", value)
+    .maybeSingle();
+
+  if (bySku?.is_active) {
+    const { data: uom } = await supabase
+      .from("uoms")
+      .select("code")
+      .eq("id", bySku.base_uom_id)
+      .maybeSingle();
+
+    return {
+      kind: "product",
+      productId: bySku.id,
+      sku: bySku.sku,
+      nameTh: bySku.name_th,
+      trackingMode: bySku.tracking_mode,
+      requiresQc: bySku.requires_qc,
+      uomId: bySku.base_uom_id,
+      uomCode: uom?.code ?? "",
+      barcodeType: "shelf",
+      matchedBarcode: bySku.sku,
+      hasOwnBarcode: false,
+    };
   }
 
   const { data: location } = await supabase

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
+import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { ScanField } from "@/components/scan/scan-field";
 import { beepAccept, beepReject, beepWarn } from "@/lib/audio/beep";
@@ -33,6 +35,8 @@ type Pending = {
   requiresQc: boolean;
   uomId: string;
   uomCode: string;
+  /** False when the SKU was scanned from a shelf label rather than the goods. */
+  hasOwnBarcode: boolean;
   lotNo?: string;
   expiryDate?: string;
   serialNo?: string;
@@ -135,6 +139,7 @@ export function ReceiveClient({
                 requiresQc: false,
                 uomId: "",
                 uomCode: "",
+                hasOwnBarcode: true,
                 lotNo: r.lotNo,
               }
             : {
@@ -145,6 +150,7 @@ export function ReceiveClient({
                 requiresQc: r.requiresQc,
                 uomId: r.uomId,
                 uomCode: r.uomCode,
+                hasOwnBarcode: r.hasOwnBarcode,
               };
 
         if (r.kind === "product" && r.requiresQc) beepWarn();
@@ -335,6 +341,27 @@ export function ReceiveClient({
 
           {step === "expiry" && (
             <p className="text-brand-subtle text-xs">{t("expiryHint")}</p>
+          )}
+
+          {/* Day-one path for packaging and other unbarcoded goods (D-35).
+              The scan matched the SKU, which means a shelf-edge label — so the
+              receiver is told the flow is working as intended rather than
+              wondering why no barcode was found, and is offered the label if
+              the bin does not have one yet. */}
+          {!pending.hasOwnBarcode && step === "qty" && (
+            <div className="border-brand-border bg-warning-bg rounded-md border px-3 py-2">
+              <p className="text-warning-text text-sm font-medium">
+                {t("noBarcodePrompt")}
+              </p>
+              <p className="text-warning-text mt-1 text-xs">{t("noBarcodeHelp")}</p>
+              <Link
+                href={`/labels?kind=shelf&ids=${pending.productId}` as Route}
+                target="_blank"
+                className="text-brand-brown mt-1 inline-block text-xs font-medium underline"
+              >
+                {t("printShelfLabel")}
+              </Link>
+            </div>
           )}
 
           <button
