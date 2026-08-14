@@ -1125,3 +1125,40 @@ empty table, which is why it cost a debugging cycle here and would have cost ano
 file create a relation, and if so does it grant on it? Postgres has `alter default
 privileges` for this, but it applies per creating-role and is easy to get subtly wrong —
 an explicit grant next to the object is harder to misread.
+
+---
+
+## D-41 — "On hand" means physical stock; virtual bins are reported separately
+
+**Date:** 2026-08-14 · **Status:** Accepted · **Phase:** 1
+
+**Context.** The dashboard's total on-hand read **0** against a warehouse holding roughly
+15,000 units.
+
+`stock_by_product.qty_on_hand` summed every location, including the virtual ones. `OPENING`
+holds the exact negative of everything predating the ledger (D-21), so the total netted to
+zero — arithmetically correct and operationally meaningless.
+
+**Decision.** `qty_on_hand` counts physical locations only. The virtual balance is kept and
+named for what it is: `qty_virtual`.
+
+**Reasoning.** "On hand" is a question about shelves. Someone asking it means "what have we
+got", never "what does the ledger sum to including bookkeeping entries".
+
+This is the third time the same filter has been needed — the stock explorer and the QC queue
+both had to exclude virtual bins in application code. Putting it in the view means the next
+caller does not have to remember, and the Phase 4 reconciliation report, which compares WMS
+stock against AccCloud balances, inherits the right definition rather than rediscovering it.
+
+`qty_virtual` is retained rather than dropped because it is genuinely useful: it should
+always equal the negative of physical stock, which is the ledger proving itself, and the
+go-live checklist uses exactly that check after opening balances are posted.
+
+**Consequences.** A dropped-and-recreated view loses its grants, so the migration re-grants
+explicitly (D-40).
+
+**Pattern worth naming, since it has now appeared three times:** a value that is correct as
+arithmetic can still be wrong as an answer. The ledger design deliberately keeps
+bookkeeping entries in the same table as physical movements — that is what makes the audit
+trail complete — so every aggregate has to decide whether it is asking an accounting
+question or a warehouse question. Most screens are asking the warehouse one.

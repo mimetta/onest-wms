@@ -7,6 +7,7 @@ import { LinkBarcodeForm } from "./link-barcode-form";
 import { beepAccept, beepReject, beepWarn } from "@/lib/audio/beep";
 import { Badge, Banner, Card, SectionLabel, Table, Td, Th } from "@/components/ui";
 import { scan, type ScanOutcome } from "./actions";
+import { MovementPath } from "@/components/movement-path";
 import type { ScanSource } from "@/hooks/use-scanner";
 
 export function ScanExplorer({
@@ -23,10 +24,14 @@ export function ScanExplorer({
   const format = useFormatter();
   const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
   const [source, setSource] = useState<ScanSource | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const handleScan = useCallback((event: { value: string; source: ScanSource }) => {
     setSource(event.source);
+    // Collapse history on each new scan: the previous item's path is not what
+    // the operator just asked about.
+    setShowHistory(false);
     startTransition(async () => {
       const result = await scan(event.value);
       setOutcome(result);
@@ -190,6 +195,26 @@ export function ScanExplorer({
                     ))}
                   </tbody>
                 </Table>
+              </div>
+            )}
+          </div>
+
+          {/* Collapsed by default. On a handheld the on-hand answer is what a
+              picker needs; the full path is an investigation, and investigations
+              happen at a desk. */}
+          <div className="border-brand-border border-t pt-4">
+            <button
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+              className="text-brand-brown text-sm font-medium"
+            >
+              {showHistory ? t("hideHistory") : t("showHistory")}
+              {outcome?.movements?.length ? ` (${outcome.movements.length})` : ""}
+            </button>
+
+            {showHistory && (
+              <div className="mt-3 overflow-x-auto">
+                <MovementPath movements={outcome?.movements ?? []} />
               </div>
             )}
           </div>

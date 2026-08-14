@@ -8,6 +8,22 @@ import { suggestCapture } from "@/lib/barcodes/symbology";
 
 export type OnHandRow = { label: string; lotNo: string | null; qty: number };
 
+/** One hop in the movement path: where from, where to, who, when, which document. */
+export type MovementRow = {
+  id: number;
+  occurredAt: string;
+  sku: string;
+  lotNo: string | null;
+  serialNo: string | null;
+  qty: number;
+  uomCode: string;
+  fromCode: string | null;
+  toCode: string | null;
+  documentType: string;
+  userName: string;
+  deviceId: string | null;
+};
+
 export type ScanOutcome = {
   resolution: ScanResolution;
   onHand?: OnHandRow[];
@@ -16,6 +32,8 @@ export type ScanOutcome = {
   onHandError?: boolean;
   /** Capture hints, populated only when the value resolved to nothing. */
   capture?: ReturnType<typeof suggestCapture>;
+  /** The movement path — every hop, most recent first. */
+  movements?: MovementRow[];
 };
 
 /**
@@ -121,8 +139,61 @@ export async function scan(raw: string): Promise<ScanOutcome> {
         : { productId: resolution.productId };
 
   const { rows, failed } = await loadOnHand(supabase, filter);
+  const movements = await loadMovements(supabase, resolution);
 
-  return { resolution, onHand: rows, onHandError: failed };
+  return { resolution, onHand: rows, onHandError: failed, movements };
+}
+
+/**
+ * The movement path: every hop this stock has made.
+ *
+ * Reads stock_movement_path, which already resolves location codes and user
+ * names — the whole point of the from/to movement shape (D-02) is that history
+ * reads as a path rather than as pairs of half-entries to reassemble.
+ *
+ * Scoped to the narrowest thing the scan identified: a lot scan shows that
+ * lot's history, not every movement of the product.
+ */
+async function loadMovements(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  resolution: ScanResolution,
+): Promise<MovementRow[]> {
+  if (resolution.kind === "unknown") return [];
+
+  let query = supabase
+    .from("stock_movement_path")
+    .select("*")
+    .order("occurred_at", { ascending: false })
+    .limit(50);
+
+  if (resolution.kind === "location") {
+    // Both directions: stock that arrived here and stock that left.
+    query = query.or(
+      `from_location_id.eq.${resolution.locationId},to_location_id.eq.${resolution.locationId}`,
+    );
+  } else if (resolution.kind === "lot") {
+    query = query.eq("lot_id", resolution.lotId);
+  } else {
+    query = query.eq("product_id", resolution.productId);
+  }
+
+  const { data, error } = await query;
+  if (error || !data) return [];
+
+  return data.map((row) => ({
+    id: Number(row.movement_id),
+    occurredAt: row.occurred_at,
+    sku: row.sku,
+    lotNo: row.lot_no,
+    serialNo: row.serial_no,
+    qty: Number(row.qty),
+    uomCode: row.uom_code,
+    fromCode: row.from_location_code,
+    toCode: row.to_location_code,
+    documentType: row.document_type,
+    userName: row.user_name,
+    deviceId: row.device_id,
+  }));
 }
 
 export type LinkBarcodeState = { error?: string; linkedTo?: string };
