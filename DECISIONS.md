@@ -1162,3 +1162,57 @@ arithmetic can still be wrong as an answer. The ledger design deliberately keeps
 bookkeeping entries in the same table as physical movements — that is what makes the audit
 trail complete — so every aggregate has to decide whether it is asking an accounting
 question or a warehouse question. Most screens are asking the warehouse one.
+
+---
+
+## D-42 — Camera constraints are explicit, and the scanner has a debug mode
+
+**Date:** 2026-08-17 · **Status:** Accepted · **Phase:** 1 (fix), from a field report
+
+**Context.** A field report: on an iPhone, camera preview working, guide box visible, a real
+EAN-13 (`8859921000383`, ~4 cm label) held steady at several distances — nothing decoded, no
+beep, no error. Manual entry of the same digits worked; a different product behaved the same;
+Safari and the installed PWA behaved the same.
+
+Those controls narrow it usefully. Manual entry working exonerates resolution, RLS and the
+whole lookup path. Two layers remain: the **decoder** (wrong formats, hints not applied) and
+the **camera** (frames never delivered, resolution too low, wrong lens).
+
+**Isolating the decoder.** `tests/ean13-decode.test.ts` builds a real EAN-13 bitmap in memory
+from the GS1 module patterns and feeds it through the exact hints the scanner configures. It
+decodes — including the field's own barcode, and at a module width narrower than a 4 cm label
+gives in a 640-pixel frame. **The decoder is not the fault.**
+
+Two things worth recording from writing that test:
+
+- The first version *appeared* to reproduce the bug, and was wrong: it passed RGBA bytes to
+  `RGBLuminanceSource`, which expects one luminance byte per pixel. A failing test is only
+  evidence once the test itself has been checked.
+- `MultiFormatReader.decode(image)` **silently discards** hints set by `setHints()` — it
+  compares stored hints against the undefined argument, decides they differ, and resets.
+  `decodeWithState()` is the correct call. `BrowserMultiFormatReader` already overrides
+  `decodeBitmap` to do this, so the app was never affected, but anyone using the core reader
+  directly would be.
+
+**Decision.** Since the camera layer cannot be reached by a unit test, make it observable and
+remove its most likely causes:
+
+1. **Explicit constraints** rather than the browser's defaults: rear camera, 1920×1080
+   *ideal*, continuous focus. The default is commonly 640×480, and an EAN-13 is 95 modules
+   wide — a barcode filling a third of that frame gives roughly two pixels per module, which
+   is marginal before focus is imperfect. All constraints are `ideal`, never `exact`: an
+   unsatisfiable exact constraint fails `getUserMedia` outright, turning a degraded scan into
+   no camera.
+2. **`TRY_HARDER`**, which costs CPU per frame and buys a great deal on hand-held 1D
+   barcodes.
+3. **100 ms between attempts** instead of the 500 ms default — ten attempts per second held
+   still rather than two.
+4. **A debug overlay behind `?debug=1`**: decode attempts, actual frame resolution, camera
+   label, and the last decoder error. No build flag and no rebuild; it works on the device
+   that has the problem, and warehouse staff can be told "add `?debug=1` to the address".
+
+**Consequences.** The debug overlay is the part that matters for the next report. `attempts`
+climbing with `frame 640×480` means resolution; `attempts` at zero means frames are not
+reaching the decoder at all; a `cam` label naming an ultra-wide lens means the wrong camera
+was selected. Each points somewhere different, and none of them are guessable from "it does
+not scan".

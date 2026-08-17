@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useScanner, type ScanEvent } from "@/hooks/use-scanner";
 import { CameraScanner } from "./camera-scanner";
@@ -29,6 +30,11 @@ export function ScanField({
   autoFocus?: boolean;
 }) {
   const t = useTranslations("scan");
+  const params = useSearchParams();
+  // ?debug=1 on any scan screen. Told to warehouse staff as "add ?debug=1 to
+  // the address" — no build flag, no rebuild, works on the device that has the
+  // problem.
+  const debug = params.get("debug") === "1";
   const inputRef = useRef<HTMLInputElement>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [value, setValue] = useState("");
@@ -102,6 +108,7 @@ export function ScanField({
 
       {cameraOpen && (
         <CameraScanner
+          debug={debug}
           onScan={(scanned) => {
             submit(scanned, "camera");
             // Closing after a hit prevents the same label being read again as
