@@ -1387,3 +1387,59 @@ decided behaviour that had not been built — and the sweep also turned up D-47.
 is now asserted in both modes: as the owner the trigger fires ("append-only"), and as a
 signed-in user the missing UPDATE/DELETE grant fires first ("permission denied"). Asserting
 only the trigger message would hide the day a grant is handed out by mistake.
+
+---
+
+## D-49 — Requisition approval stays warehouse_manager, unscoped by department
+
+*Confirmed 18 Aug 2026.*
+
+`warehouse_manager` holds `requisition.approve` for **all** departments. There is no
+department scoping: the manager approves production's requisition and maintenance's alike.
+
+**Reasoning.** The alternative — approval by the head of the requesting department — is a
+defensible control, but it needs a department-head role, a mapping from user to department,
+and a fallback for when that person is on leave. None of that earns its place before go-live
+in a single warehouse where the manager knows every request anyway.
+
+**Consequences.** Recorded here because it is a deliberate choice, not an oversight, and
+because the natural post-go-live change is exactly the thing this decision defers. If
+department-head approval is wanted later, the shape is: a `department_id` on `user_profiles`,
+a `requisition.approve_own_department` permission, and a policy clause — permissions are data
+(D-20), so the role change itself is rows rather than a migration.
+
+---
+
+## D-50 — Pick suggestions are advisory, and reuse the availability view
+
+*Phase 2.1, 18 Aug 2026.*
+
+`suggest_picks(product, qty, warehouse, lot)` proposes bins and lots in pick order. It is
+**not** a control: `post_document()` re-checks sufficiency at the exact source bin and
+re-applies the QC gate when the issue is posted (D-13, D-14). If the two ever disagree, the
+posting guard wins — it reads the ledger under a lock, this reads a view a moment earlier.
+
+**Ordering.** Expiry first (FEFO), then lot age (FIFO), then smallest holding, then location
+code. Dated stock is offered ahead of undated stock even when the undated stock is older,
+because an undated part cannot spoil and a dated one can. The smallest-holding tie-break
+clears part-used bins instead of leaving a scatter of remainders that each need their own
+pick line later.
+
+**Eligibility is not restated.** The function selects from `stock_available`, which already
+excludes bins that do not count as available — receiving, staging, QC hold, quarantine,
+scrap, and every virtual bin — and every lot that is not QC-passed. Restating those rules
+here would have created a second definition of "pickable" to keep in sync with the first.
+
+**Not SECURITY DEFINER**, deliberately. `stock_available` is a `security_invoker` view, so
+the caller's own policies apply and this cannot become a way to read around them.
+
+**Short is not empty.** When the warehouse holds less than was asked for, every eligible row
+is returned rather than none. The caller sums `qty_suggested` and compares: 15 of 40 means
+"pick what there is and raise the rest", an empty list means "there is none". Those are
+different sentences on the screen, so the function must not collapse them.
+
+**A trap worth recording:** lots created in one transaction share a `created_at`, because
+`now()` is transaction-start time. FIFO ordering is therefore untestable without setting the
+timestamps explicitly. In production each receipt is its own transaction, so this is a test
+artefact rather than a design flaw — but it is why the FIFO tests set `created_at` by hand,
+and why a reader should not "simplify" them.
