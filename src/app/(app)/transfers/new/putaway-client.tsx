@@ -41,9 +41,11 @@ export function PutawayClient({ canApprove }: { canApprove: boolean }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
 
-  const [source, setSource] = useState<{ id: string; code: string; items: BinItem[] } | null>(
-    null,
-  );
+  const [source, setSource] = useState<{
+    id: string;
+    code: string;
+    items: BinItem[];
+  } | null>(null);
   const [item, setItem] = useState<BinItem | null>(null);
   const [qty, setQty] = useState("");
   const [dest, setDest] = useState<{ id: string; code: string } | null>(null);
@@ -58,11 +60,7 @@ export function PutawayClient({ canApprove }: { canApprove: boolean }) {
 
   // Which stage the operator is at, so one scan field can serve the whole flow
   // without them choosing which box to aim at.
-  const stage: "source" | "item" | "dest" = !source
-    ? "source"
-    : !item
-      ? "item"
-      : "dest";
+  const stage: "source" | "item" | "dest" = !source ? "source" : !item ? "item" : "dest";
 
   const handleScan = async (value: string) => {
     setError(null);
@@ -182,9 +180,7 @@ export function PutawayClient({ canApprove }: { canApprove: boolean }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {done && (
-        <Banner tone="good">{t("postedAs", { docNo: done })}</Banner>
-      )}
+      {done && <Banner tone="good">{t("postedAs", { docNo: done })}</Banner>}
 
       <Card className="flex flex-col gap-3">
         <div className="flex items-center gap-2">
@@ -224,7 +220,9 @@ export function PutawayClient({ canApprove }: { canApprove: boolean }) {
                       {i.nameTh}
                     </span>
                     {i.lotNo && (
-                      <span className="text-brand-muted font-mono text-xs">{i.lotNo}</span>
+                      <span className="text-brand-muted font-mono text-xs">
+                        {i.lotNo}
+                      </span>
                     )}
                     {i.serialNo && (
                       <span className="text-brand-muted font-mono text-xs">
@@ -254,7 +252,10 @@ export function PutawayClient({ canApprove }: { canApprove: boolean }) {
               <p className="text-brand-dark text-sm">
                 <span className="font-mono">{item.sku}</span> {item.nameTh}
                 {item.lotNo && (
-                  <span className="text-brand-muted font-mono text-xs"> {item.lotNo}</span>
+                  <span className="text-brand-muted font-mono text-xs">
+                    {" "}
+                    {item.lotNo}
+                  </span>
                 )}
               </p>
             </div>

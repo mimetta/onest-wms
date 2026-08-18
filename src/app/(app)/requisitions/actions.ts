@@ -84,7 +84,13 @@ export async function setHeader(
  * lot scan is reported as the wrong kind of thing rather than silently ignored.
  */
 export async function scanProduct(raw: string): Promise<
-  ActionResult<{ productId: string; sku: string; nameTh: string; uomId: string; uomCode: string }>
+  ActionResult<{
+    productId: string;
+    sku: string;
+    nameTh: string;
+    uomId: string;
+    uomCode: string;
+  }>
 > {
   await requirePerm("requisition.create");
 
@@ -121,8 +127,7 @@ export async function scanProduct(raw: string): Promise<
           sku: product.sku,
           nameTh: product.name_th,
           uomId: product.base_uom_id,
-          uomCode:
-            (product.uoms as unknown as { code: string } | null)?.code ?? "",
+          uomCode: (product.uoms as unknown as { code: string } | null)?.code ?? "",
         },
       };
     }
@@ -168,7 +173,11 @@ export async function addLine(input: {
   if (error) return { ok: false, error: "errorSave", detail: error.message };
 
   const [{ data: product }, { data: uom }, { data: stock }] = await Promise.all([
-    supabase.from("products").select("sku, name_th").eq("id", input.productId).maybeSingle(),
+    supabase
+      .from("products")
+      .select("sku, name_th")
+      .eq("id", input.productId)
+      .maybeSingle(),
     supabase.from("uoms").select("code").eq("id", input.uomId).maybeSingle(),
     supabase
       .from("stock_by_product")

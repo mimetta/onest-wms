@@ -83,7 +83,9 @@ export async function ensureDraft(): Promise<ActionResult<string>> {
  */
 export async function readBin(
   raw: string,
-): Promise<ActionResult<{ locationId: string; code: string; type: string; items: BinItem[] }>> {
+): Promise<
+  ActionResult<{ locationId: string; code: string; type: string; items: BinItem[] }>
+> {
   const user = await requirePerm("transfer.create");
 
   const resolved = await resolveBarcode(raw);
@@ -108,11 +110,11 @@ export async function readBin(
   const rows = data ?? [];
 
   const productIds = [...new Set(rows.map((r) => r.product_id))];
-  const lotIds = [...new Set(rows.map((r) => r.lot_id))].filter(
-    (v): v is string => Boolean(v),
+  const lotIds = [...new Set(rows.map((r) => r.lot_id))].filter((v): v is string =>
+    Boolean(v),
   );
-  const serialIds = [...new Set(rows.map((r) => r.serial_id))].filter(
-    (v): v is string => Boolean(v),
+  const serialIds = [...new Set(rows.map((r) => r.serial_id))].filter((v): v is string =>
+    Boolean(v),
   );
 
   const [{ data: products }, { data: lots }, { data: serials }] = await Promise.all([
@@ -245,19 +247,37 @@ export async function addLine(input: {
 
   if (error) return { ok: false, error: "errorSave", detail: error.message };
 
-  const [{ data: product }, { data: uom }, { data: from }, { data: to }, { data: lot }, { data: serial }] =
-    await Promise.all([
-      supabase.from("products").select("sku, name_th").eq("id", input.productId).maybeSingle(),
-      supabase.from("uoms").select("code").eq("id", input.uomId).maybeSingle(),
-      supabase.from("locations").select("code").eq("id", input.fromLocationId).maybeSingle(),
-      supabase.from("locations").select("code").eq("id", input.toLocationId).maybeSingle(),
-      input.lotId
-        ? supabase.from("lots").select("lot_no").eq("id", input.lotId).maybeSingle()
-        : Promise.resolve({ data: null }),
-      input.serialId
-        ? supabase.from("serials").select("serial_no").eq("id", input.serialId).maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
+  const [
+    { data: product },
+    { data: uom },
+    { data: from },
+    { data: to },
+    { data: lot },
+    { data: serial },
+  ] = await Promise.all([
+    supabase
+      .from("products")
+      .select("sku, name_th")
+      .eq("id", input.productId)
+      .maybeSingle(),
+    supabase.from("uoms").select("code").eq("id", input.uomId).maybeSingle(),
+    supabase
+      .from("locations")
+      .select("code")
+      .eq("id", input.fromLocationId)
+      .maybeSingle(),
+    supabase.from("locations").select("code").eq("id", input.toLocationId).maybeSingle(),
+    input.lotId
+      ? supabase.from("lots").select("lot_no").eq("id", input.lotId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    input.serialId
+      ? supabase
+          .from("serials")
+          .select("serial_no")
+          .eq("id", input.serialId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   revalidatePath("/transfers");
   return {

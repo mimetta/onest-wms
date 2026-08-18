@@ -72,14 +72,16 @@ export default async function Page({ searchParams }: PageProps<"/documents">) {
 
   const entries: Entry[] = results
     .flatMap((r) =>
-      (r.data as unknown as {
-        id: string;
-        doc_no: string | null;
-        doc_date: string;
-        status: DocStatus;
-        created_at: string;
-        created: { full_name: string } | null;
-      }[]).map((row) => ({
+      (
+        r.data as unknown as {
+          id: string;
+          doc_no: string | null;
+          doc_date: string;
+          status: DocStatus;
+          created_at: string;
+          created: { full_name: string } | null;
+        }[]
+      ).map((row) => ({
         key: `${r.type}-${row.id}`,
         type: r.type,
         id: row.id,
@@ -175,10 +177,7 @@ export default async function Page({ searchParams }: PageProps<"/documents">) {
           // dead link would be worse than showing nothing.
           if (!route) return null;
           return (
-            <Link
-              href={`${route}/${e.id}` as never}
-              className="text-brand-brown text-sm"
-            >
+            <Link href={`${route}/${e.id}` as never} className="text-brand-brown text-sm">
               {t("open")}
             </Link>
           );
@@ -190,13 +189,7 @@ export default async function Page({ searchParams }: PageProps<"/documents">) {
 }
 
 /** Filters are links, not client state: shareable, back-button-correct, no JS. */
-function buildHref({
-  type,
-  status,
-}: {
-  type: DocType | null;
-  status: string | null;
-}) {
+function buildHref({ type, status }: { type: DocType | null; status: string | null }) {
   const search = new URLSearchParams();
   if (type) search.set("type", type);
   if (status) search.set("status", status);
@@ -204,13 +197,7 @@ function buildHref({
   return (qs ? `/documents?${qs}` : "/documents") as never;
 }
 
-function FilterRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-brand-subtle text-xs font-semibold tracking-wider uppercase">

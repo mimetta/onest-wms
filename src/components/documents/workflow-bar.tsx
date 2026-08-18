@@ -60,7 +60,9 @@ export function WorkflowBar({
 
   const working = pending || busy;
 
-  const run = async (fn: () => Promise<{ ok: boolean; error?: string; detail?: string }>) => {
+  const run = async (
+    fn: () => Promise<{ ok: boolean; error?: string; detail?: string }>,
+  ) => {
     setBusy(true);
     setMessage(null);
     const result = await fn();

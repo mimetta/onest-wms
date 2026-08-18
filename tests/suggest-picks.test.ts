@@ -112,7 +112,9 @@ describe("suggest_picks · FEFO", () => {
       const second = await makeLot(db, p, `L-B-${w.tag}`, "passed", w.users.qc);
       await db.asOwner();
       await db.query(`update lots set expiry_date = '2027-01-31' where id = $1`, [first]);
-      await db.query(`update lots set expiry_date = '2027-05-31' where id = $1`, [second]);
+      await db.query(`update lots set expiry_date = '2027-05-31' where id = $1`, [
+        second,
+      ]);
 
       await giveStock(db, w, {
         productId: p,
@@ -286,8 +288,12 @@ describe("suggest_picks · what it refuses to offer", () => {
       const passed = await makeLot(db, p, `L-OK-${w.tag}`, "passed", w.users.qc);
       // The pending lot expires sooner, so FEFO alone would reach for it first.
       await db.asOwner();
-      await db.query(`update lots set expiry_date = '2027-01-31' where id = $1`, [pending]);
-      await db.query(`update lots set expiry_date = '2027-09-30' where id = $1`, [passed]);
+      await db.query(`update lots set expiry_date = '2027-01-31' where id = $1`, [
+        pending,
+      ]);
+      await db.query(`update lots set expiry_date = '2027-09-30' where id = $1`, [
+        passed,
+      ]);
 
       await giveStock(db, w, {
         productId: p,
@@ -364,7 +370,9 @@ describe("suggest_picks · what it refuses to offer", () => {
       const wanted = await makeLot(db, p, `L-WANT-${w.tag}`, "passed", w.users.qc);
       await db.asOwner();
       await db.query(`update lots set expiry_date = '2027-01-31' where id = $1`, [soon]);
-      await db.query(`update lots set expiry_date = '2027-12-31' where id = $1`, [wanted]);
+      await db.query(`update lots set expiry_date = '2027-12-31' where id = $1`, [
+        wanted,
+      ]);
 
       for (const [lot, loc] of [
         [soon, w.locations.storage],

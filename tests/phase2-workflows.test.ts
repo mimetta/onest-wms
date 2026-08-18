@@ -241,7 +241,13 @@ describe("ใบโอนย้าย · transfer", () => {
         `insert into transfer_lines
            (header_id, line_no, product_id, qty, uom_id, from_location_id, to_location_id)
          values ($1, 1, $2, 30, $3, $4, $5)`,
-        [tr, w.products.untracked, w.uoms.pcs, w.locations.receiving, w.locations.storage],
+        [
+          tr,
+          w.products.untracked,
+          w.uoms.pcs,
+          w.locations.receiving,
+          w.locations.storage,
+        ],
       );
 
       await db.actAs(w.users.manager);
@@ -379,7 +385,13 @@ describe("ใบส่งสินค้า · delivery note", () => {
         `insert into delivery_note_lines
            (header_id, line_no, product_id, qty, uom_id, from_location_id, to_location_id)
          values ($1, 1, $2, 15, $3, $4, $5)`,
-        [dn, w.products.untracked, w.uoms.pcs, w.locations.staging, w.locations.consignment],
+        [
+          dn,
+          w.products.untracked,
+          w.uoms.pcs,
+          w.locations.staging,
+          w.locations.consignment,
+        ],
       );
 
       await db.query("select approve_document('delivery_note', $1)", [dn]);

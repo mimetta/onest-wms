@@ -78,7 +78,10 @@ export async function ensureDraft(
 
   const { data: existing } = requisitionId
     ? await base.eq("requisition_id", requisitionId).maybeSingle()
-    : await base.eq("department_id", departmentId).is("requisition_id", null).maybeSingle();
+    : await base
+        .eq("department_id", departmentId)
+        .is("requisition_id", null)
+        .maybeSingle();
 
   if (existing) return { ok: true, data: existing.id };
 
@@ -162,7 +165,12 @@ export async function verifyBinScan(
   raw: string,
   expectedLocationId: string,
 ): Promise<
-  ActionResult<{ locationId: string; code: string; matches: boolean; blocksConsumption: boolean }>
+  ActionResult<{
+    locationId: string;
+    code: string;
+    matches: boolean;
+    blocksConsumption: boolean;
+  }>
 > {
   await requirePerm("issue.create");
 
@@ -221,18 +229,31 @@ export async function addLine(input: {
 
   if (error) return { ok: false, error: "errorSave", detail: error.message };
 
-  const [{ data: product }, { data: uom }, { data: location }, { data: lot }, { data: serial }] =
-    await Promise.all([
-      supabase.from("products").select("sku, name_th").eq("id", input.productId).maybeSingle(),
-      supabase.from("uoms").select("code").eq("id", input.uomId).maybeSingle(),
-      supabase.from("locations").select("code").eq("id", input.locationId).maybeSingle(),
-      input.lotId
-        ? supabase.from("lots").select("lot_no").eq("id", input.lotId).maybeSingle()
-        : Promise.resolve({ data: null }),
-      input.serialId
-        ? supabase.from("serials").select("serial_no").eq("id", input.serialId).maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
+  const [
+    { data: product },
+    { data: uom },
+    { data: location },
+    { data: lot },
+    { data: serial },
+  ] = await Promise.all([
+    supabase
+      .from("products")
+      .select("sku, name_th")
+      .eq("id", input.productId)
+      .maybeSingle(),
+    supabase.from("uoms").select("code").eq("id", input.uomId).maybeSingle(),
+    supabase.from("locations").select("code").eq("id", input.locationId).maybeSingle(),
+    input.lotId
+      ? supabase.from("lots").select("lot_no").eq("id", input.lotId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    input.serialId
+      ? supabase
+          .from("serials")
+          .select("serial_no")
+          .eq("id", input.serialId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   revalidatePath("/issues");
   return {

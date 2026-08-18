@@ -6,8 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { DOC_CONFIG, perm, type DocType } from "@/lib/documents/config";
 
 export type ActionResult<T = undefined> =
-  | { ok: true; data?: T }
-  | { ok: false; error: string; detail?: string };
+  { ok: true; data?: T } | { ok: false; error: string; detail?: string };
 
 /**
  * The workflow verbs, once, for every document type.
@@ -30,10 +29,7 @@ async function revalidateFor(type: DocType) {
   revalidatePath("/");
 }
 
-export async function submitDocument(
-  type: DocType,
-  id: string,
-): Promise<ActionResult> {
+export async function submitDocument(type: DocType, id: string): Promise<ActionResult> {
   await requirePerm(perm(type, "create"));
   const supabase = await createClient();
 
@@ -47,10 +43,7 @@ export async function submitDocument(
   return { ok: true };
 }
 
-export async function approveDocument(
-  type: DocType,
-  id: string,
-): Promise<ActionResult> {
+export async function approveDocument(type: DocType, id: string): Promise<ActionResult> {
   await requirePerm(perm(type, "approve"));
   const supabase = await createClient();
 

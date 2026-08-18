@@ -273,7 +273,9 @@ export function DeliveryBuilder({
                         {s.locationCode}
                       </span>
                       {s.lotNo && (
-                        <span className="text-brand-muted font-mono text-xs">{s.lotNo}</span>
+                        <span className="text-brand-muted font-mono text-xs">
+                          {s.lotNo}
+                        </span>
                       )}
                       {s.expiryDate && (
                         <span className="text-warning-text text-xs">{s.expiryDate}</span>

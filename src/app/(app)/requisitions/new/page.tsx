@@ -21,7 +21,11 @@ export default async function Page() {
   const supabase = await createClient();
 
   const [{ data: depts }, { data: products }] = await Promise.all([
-    supabase.from("departments").select("id, name_th").eq("is_active", true).order("code"),
+    supabase
+      .from("departments")
+      .select("id, name_th")
+      .eq("is_active", true)
+      .order("code"),
     supabase
       .from("products")
       .select("id, sku, name_th, base_uom_id, uoms:base_uom_id(code)")

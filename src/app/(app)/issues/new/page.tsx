@@ -39,27 +39,35 @@ export default async function Page() {
   const t = await getTranslations("issues");
   const supabase = await createClient();
 
-  const [{ data: reqData }, { data: productData }, { data: deptData }, { data: fulfilled }] =
-    await Promise.all([
-      supabase
-        .from("requisitions")
-        .select(
-          `id, doc_no, department_id, departments(name_th),
+  const [
+    { data: reqData },
+    { data: productData },
+    { data: deptData },
+    { data: fulfilled },
+  ] = await Promise.all([
+    supabase
+      .from("requisitions")
+      .select(
+        `id, doc_no, department_id, departments(name_th),
            requisition_lines(product_id, qty,
              products(sku, name_th, base_uom_id, tracking_mode, uoms:base_uom_id(code)))`,
-        )
-        .eq("status", "approved")
-        .eq("warehouse_id", user.warehouseId)
-        .order("doc_date", { ascending: true }),
-      supabase
-        .from("products")
-        .select("id, sku, name_th, base_uom_id, tracking_mode, uoms:base_uom_id(code)")
-        .eq("is_active", true)
-        .order("sku"),
-      supabase.from("departments").select("id, name_th").eq("is_active", true).order("code"),
-      // Requisition ids that a posted issue already drew against.
-      supabase.from("issues").select("requisition_id").eq("status", "posted"),
-    ]);
+      )
+      .eq("status", "approved")
+      .eq("warehouse_id", user.warehouseId)
+      .order("doc_date", { ascending: true }),
+    supabase
+      .from("products")
+      .select("id, sku, name_th, base_uom_id, tracking_mode, uoms:base_uom_id(code)")
+      .eq("is_active", true)
+      .order("sku"),
+    supabase
+      .from("departments")
+      .select("id, name_th")
+      .eq("is_active", true)
+      .order("code"),
+    // Requisition ids that a posted issue already drew against.
+    supabase.from("issues").select("requisition_id").eq("status", "posted"),
+  ]);
 
   const done = new Set(
     (fulfilled ?? []).map((i) => i.requisition_id).filter((v): v is string => Boolean(v)),

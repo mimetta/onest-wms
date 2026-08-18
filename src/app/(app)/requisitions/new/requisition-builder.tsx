@@ -234,7 +234,10 @@ export function RequisitionBuilder({
             <Input value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>
 
-          <Button onClick={() => void handleAdd()} disabled={busy || !product || !draftId}>
+          <Button
+            onClick={() => void handleAdd()}
+            disabled={busy || !product || !draftId}
+          >
             {t("add")}
           </Button>
         </div>
@@ -279,10 +282,7 @@ export function RequisitionBuilder({
       )}
 
       <div className="flex justify-end gap-2">
-        <Button
-          onClick={() => void handleSubmit()}
-          disabled={busy || lines.length === 0}
-        >
+        <Button onClick={() => void handleSubmit()} disabled={busy || lines.length === 0}>
           {t("submitRequest")}
         </Button>
       </div>

@@ -102,19 +102,17 @@ export async function getSuggestions(
 
   return {
     ok: true,
-    data: (data ?? []).map(
-      (r: Record<string, string | null>) => ({
-        locationId: r.location_id as string,
-        locationCode: r.location_code as string,
-        lotId: r.lot_id,
-        lotNo: r.lot_no,
-        serialId: r.serial_id,
-        expiryDate: r.expiry_date,
-        qtySuggested: Number(r.qty_suggested),
-        qtyAtBin: Number(r.qty_at_bin),
-        strategy: r.strategy as "fefo" | "fifo",
-      }),
-    ),
+    data: (data ?? []).map((r: Record<string, string | null>) => ({
+      locationId: r.location_id as string,
+      locationCode: r.location_code as string,
+      lotId: r.lot_id,
+      lotNo: r.lot_no,
+      serialId: r.serial_id,
+      expiryDate: r.expiry_date,
+      qtySuggested: Number(r.qty_suggested),
+      qtyAtBin: Number(r.qty_at_bin),
+      strategy: r.strategy as "fefo" | "fifo",
+    })),
   };
 }
 
@@ -195,21 +193,35 @@ export async function addLine(input: {
 
   if (error) return { ok: false, error: "errorSave", detail: error.message };
 
-  const [{ data: product }, { data: uom }, { data: from }, { data: to }, { data: lot }, { data: serial }] =
-    await Promise.all([
-      supabase.from("products").select("sku, name_th").eq("id", input.productId).maybeSingle(),
-      supabase.from("uoms").select("code").eq("id", input.uomId).maybeSingle(),
-      supabase.from("locations").select("code").eq("id", input.locationId).maybeSingle(),
-      toLocationId
-        ? supabase.from("locations").select("code").eq("id", toLocationId).maybeSingle()
-        : Promise.resolve({ data: null }),
-      input.lotId
-        ? supabase.from("lots").select("lot_no").eq("id", input.lotId).maybeSingle()
-        : Promise.resolve({ data: null }),
-      input.serialId
-        ? supabase.from("serials").select("serial_no").eq("id", input.serialId).maybeSingle()
-        : Promise.resolve({ data: null }),
-    ]);
+  const [
+    { data: product },
+    { data: uom },
+    { data: from },
+    { data: to },
+    { data: lot },
+    { data: serial },
+  ] = await Promise.all([
+    supabase
+      .from("products")
+      .select("sku, name_th")
+      .eq("id", input.productId)
+      .maybeSingle(),
+    supabase.from("uoms").select("code").eq("id", input.uomId).maybeSingle(),
+    supabase.from("locations").select("code").eq("id", input.locationId).maybeSingle(),
+    toLocationId
+      ? supabase.from("locations").select("code").eq("id", toLocationId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    input.lotId
+      ? supabase.from("lots").select("lot_no").eq("id", input.lotId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    input.serialId
+      ? supabase
+          .from("serials")
+          .select("serial_no")
+          .eq("id", input.serialId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
 
   revalidatePath("/delivery-notes");
   return {

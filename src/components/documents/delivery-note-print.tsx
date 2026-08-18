@@ -181,7 +181,10 @@ function SignatureBlock({ caption, english }: { caption: string; english: string
           <span className="w-[20mm] shrink-0 text-[9pt]">
             {row.th} / {row.en}
           </span>
-          <span aria-hidden className="h-[7mm] min-w-0 flex-1 border-b-[0.4mm] border-black" />
+          <span
+            aria-hidden
+            className="h-[7mm] min-w-0 flex-1 border-b-[0.4mm] border-black"
+          />
         </div>
       ))}
     </div>

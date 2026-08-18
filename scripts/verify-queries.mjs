@@ -225,12 +225,19 @@ for (const table of [
 
 // --- stock_by_product (used for the availability hint) -----------------
 await check("stock_by_product availability", () =>
-  staff.from("stock_by_product").select("qty_available, product_id, warehouse_id").limit(3),
+  staff
+    .from("stock_by_product")
+    .select("qty_available, product_id, warehouse_id")
+    .limit(3),
 );
 
 // --- the D-46 rule, as a real user ------------------------------------
 {
-  const { data: dept } = await staff.from("departments").select("id").limit(1).maybeSingle();
+  const { data: dept } = await staff
+    .from("departments")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
   const { data: wh } = await staff.from("warehouses").select("id").limit(1).maybeSingle();
   const { data: me } = await staff.auth.getUser();
 

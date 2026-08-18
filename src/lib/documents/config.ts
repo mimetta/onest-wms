@@ -24,12 +24,7 @@ export type DocType =
   | "cycle_count";
 
 export type DocStatus =
-  | "draft"
-  | "submitted"
-  | "approved"
-  | "dispatched"
-  | "posted"
-  | "cancelled";
+  "draft" | "submitted" | "approved" | "dispatched" | "posted" | "cancelled";
 
 export type DocConfig = {
   /** Table holding the header. The enum label plus 's', as the RPCs assume. */
@@ -128,12 +123,14 @@ export const isFinal = (type: DocType, status: DocStatus) =>
   status === "posted" ||
   (!DOC_CONFIG[type].posts && status === "approved");
 
-export const STATUS_TONE: Record<DocStatus, "neutral" | "info" | "warn" | "good" | "bad"> =
-  {
-    draft: "neutral",
-    submitted: "info",
-    approved: "warn",
-    dispatched: "info",
-    posted: "good",
-    cancelled: "bad",
-  };
+export const STATUS_TONE: Record<
+  DocStatus,
+  "neutral" | "info" | "warn" | "good" | "bad"
+> = {
+  draft: "neutral",
+  submitted: "info",
+  approved: "warn",
+  dispatched: "info",
+  posted: "good",
+  cancelled: "bad",
+};

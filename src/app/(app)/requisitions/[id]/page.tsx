@@ -2,7 +2,15 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { can, requirePerm } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
-import { Card, PageHeader, SectionLabel, Table, TableWrap, Td, Th } from "@/components/ui";
+import {
+  Card,
+  PageHeader,
+  SectionLabel,
+  Table,
+  TableWrap,
+  Td,
+  Th,
+} from "@/components/ui";
 import { WorkflowBar } from "@/components/documents/workflow-bar";
 import type { DocStatus } from "@/lib/documents/config";
 
@@ -79,10 +87,7 @@ export default async function Page({ params }: PageProps<"/requisitions/[id]">) 
           <Detail label={t("date")} value={header.doc_date} />
           <Detail label={t("requiredDate")} value={header.required_date ?? "—"} />
           <Detail label={t("raisedBy")} value={createdBy?.full_name ?? "—"} />
-          <Detail
-            label={t("approvedBy")}
-            value={approver?.full_name ?? "—"}
-          />
+          <Detail label={t("approvedBy")} value={approver?.full_name ?? "—"} />
         </dl>
         {header.notes && <p className="text-brand-dark text-sm">{header.notes}</p>}
       </Card>
@@ -106,9 +111,7 @@ export default async function Page({ params }: PageProps<"/requisitions/[id]">) 
                   <span className="font-mono text-xs">{l.products?.sku}</span>
                   <span className="text-brand-muted ml-2">{l.products?.name_th}</span>
                 </Td>
-                <Td className="tabular text-right">
-                  {Number(l.qty).toLocaleString()}
-                </Td>
+                <Td className="tabular text-right">{Number(l.qty).toLocaleString()}</Td>
                 <Td>{l.uoms?.code}</Td>
                 <Td className="text-brand-muted">{l.note ?? ""}</Td>
               </tr>

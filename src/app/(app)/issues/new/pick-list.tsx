@@ -171,16 +171,15 @@ export function PickList({
 
       {suggestions === null && <p className="text-brand-muted text-sm">{t("loading")}</p>}
 
-      {suggestions?.length === 0 && (
-        <Banner tone="warn">{t("nothingAvailable")}</Banner>
-      )}
+      {suggestions?.length === 0 && <Banner tone="warn">{t("nothingAvailable")}</Banner>}
 
       {suggestions && suggestions.length > 0 && (
         <>
           <SectionLabel>{t("pickFrom")}</SectionLabel>
           <ul className="flex flex-col gap-1.5">
             {suggestions.map((s) => {
-              const chosen = active?.locationId === s.locationId && active?.lotId === s.lotId;
+              const chosen =
+                active?.locationId === s.locationId && active?.lotId === s.lotId;
               return (
                 <li key={`${s.locationId}-${s.lotId ?? "none"}`}>
                   <button
@@ -202,7 +201,9 @@ export function PickList({
                       {s.locationCode}
                     </span>
                     {s.lotNo && (
-                      <span className="text-brand-muted font-mono text-xs">{s.lotNo}</span>
+                      <span className="text-brand-muted font-mono text-xs">
+                        {s.lotNo}
+                      </span>
                     )}
                     {s.expiryDate && (
                       <span className="text-warning-text text-xs">
@@ -229,7 +230,9 @@ export function PickList({
               />
 
               {scannedBin && !override && (
-                <Banner tone="good">{t("binConfirmed", { code: scannedBin.code })}</Banner>
+                <Banner tone="good">
+                  {t("binConfirmed", { code: scannedBin.code })}
+                </Banner>
               )}
               {scannedBin && override && (
                 <Banner tone="warn">

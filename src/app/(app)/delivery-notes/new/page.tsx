@@ -13,26 +13,27 @@ export default async function Page() {
   const t = await getTranslations("deliveryNotes");
   const supabase = await createClient();
 
-  const [{ data: partnerData }, { data: productData }, { data: sites }] = await Promise.all([
-    supabase
-      .from("partners")
-      .select("id, code, name_th")
-      .in("type", ["customer", "both"])
-      .eq("is_active", true)
-      .order("code"),
-    supabase
-      .from("products")
-      .select("id, sku, name_th, base_uom_id, uoms:base_uom_id(code)")
-      .eq("is_active", true)
-      .order("sku"),
-    // Which customers have somewhere to consign to. Loaded once rather than
-    // asked per selection, because there are two of them.
-    supabase
-      .from("locations")
-      .select("partner_id")
-      .eq("type", "consignment_site")
-      .eq("is_active", true),
-  ]);
+  const [{ data: partnerData }, { data: productData }, { data: sites }] =
+    await Promise.all([
+      supabase
+        .from("partners")
+        .select("id, code, name_th")
+        .in("type", ["customer", "both"])
+        .eq("is_active", true)
+        .order("code"),
+      supabase
+        .from("products")
+        .select("id, sku, name_th, base_uom_id, uoms:base_uom_id(code)")
+        .eq("is_active", true)
+        .order("sku"),
+      // Which customers have somewhere to consign to. Loaded once rather than
+      // asked per selection, because there are two of them.
+      supabase
+        .from("locations")
+        .select("partner_id")
+        .eq("type", "consignment_site")
+        .eq("is_active", true),
+    ]);
 
   const withSites = new Set(
     (sites ?? []).map((s) => s.partner_id).filter((v): v is string => Boolean(v)),
