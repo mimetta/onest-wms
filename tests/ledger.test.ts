@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { withRollback } from "./helpers/db";
-import { giveStock, makeLot, seedWorld } from "./helpers/fixtures";
+import { giveStock, makeLot, secondWarehouse, seedWorld } from "./helpers/fixtures";
 
 describe("the ledger is append-only", () => {
   it("refuses UPDATE on a posted movement", async () => {
@@ -43,6 +43,42 @@ describe("the ledger is append-only", () => {
       expect(msg).toContain("append-only");
     });
   });
+
+  /**
+   * The three tests above run as the table owner, so they prove the TRIGGER
+   * holds — the last line of defence, the one that catches a migration or an
+   * admin script.
+   *
+   * This one runs as a signed-in user, where the defence that actually fires is
+   * the missing UPDATE/DELETE grant: Postgres rejects the statement on
+   * privileges before the trigger is ever reached. Both layers matter, and
+   * asserting only the trigger message would hide the day a grant was handed
+   * out by mistake.
+   */
+  it("gives no signed-in user any way to rewrite it", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      await giveStock(db, w, {
+        productId: w.products.untracked,
+        locationId: w.locations.storage,
+        qty: 10,
+        uomId: w.uoms.pcs,
+        actor: w.users.admin,
+      });
+
+      for (const user of [w.users.admin, w.users.manager, w.users.staff]) {
+        await db.actAs(user);
+
+        expect(
+          await db.expectError(() => db.query("update stock_movements set qty = 999")),
+        ).toMatch(/permission denied|append-only/);
+
+        expect(
+          await db.expectError(() => db.query("delete from stock_movements")),
+        ).toMatch(/permission denied|append-only/);
+      }
+    });
+  });
 });
 
 describe("on-hand arithmetic", () => {
@@ -73,8 +109,7 @@ describe("on-hand arithmetic", () => {
          values ($1, 1, $2, 30, $3, $4, $5)`,
         [tr, p, w.uoms.pcs, w.locations.storage, w.locations.storage2],
       );
-      await db.post("transfer", tr); // dispatch leg
-      await db.post("transfer", tr); // receive leg
+      await db.post("transfer", tr); // one step: same warehouse (D-44)
 
       expect(await db.onHand(p, w.locations.storage)).toBe(70);
       expect(await db.onHand(p, w.locations.storage2)).toBe(30);
@@ -85,6 +120,11 @@ describe("on-hand arithmetic", () => {
   it("makes in-transit stock visible between the two transfer legs", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
+      // Only a transfer BETWEEN warehouses has legs to sit between: a
+      // same-warehouse move posts in one hop and never touches in_transit
+      // (D-44). So this, the reason in_transit exists at all, needs a second
+      // warehouse to be testable.
+      const second = await secondWarehouse(db, w);
       const p = w.products.untracked;
       await giveStock(db, w, {
         productId: p,
@@ -97,14 +137,14 @@ describe("on-hand arithmetic", () => {
       const tr = await db.value(
         `insert into transfers
            (warehouse_id, from_warehouse_id, to_warehouse_id, status, created_by)
-         values ($1, $1, $1, 'approved', $2) returning id`,
-        [w.wh, w.users.admin],
+         values ($1, $1, $2, 'approved', $3) returning id`,
+        [w.wh, second.wh, w.users.admin],
       );
       await db.query(
         `insert into transfer_lines
            (header_id, line_no, product_id, qty, uom_id, from_location_id, to_location_id)
          values ($1, 1, $2, 20, $3, $4, $5)`,
-        [tr, p, w.uoms.pcs, w.locations.storage, w.locations.storage2],
+        [tr, p, w.uoms.pcs, w.locations.storage, second.bin],
       );
 
       await db.post("transfer", tr);
@@ -124,7 +164,7 @@ describe("on-hand arithmetic", () => {
       const lot = await makeLot(db, w.products.lotTracked, "L-001", "passed", w.users.qc);
 
       // One drum, entered as 1 DRUM, must land as 200 KG.
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
       const gr = await db.value(
         `insert into goods_receipts (warehouse_id, status, created_by)
          values ($1, 'approved', $2) returning id`,
@@ -149,7 +189,7 @@ describe("tracking discipline", () => {
   it("rejects a lot-tracked product moving without a lot", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
 
       const adj = await db.value(
         `insert into adjustments (warehouse_id, reason_code_id, status, created_by)
@@ -179,7 +219,7 @@ describe("tracking discipline", () => {
         "passed",
         w.users.qc,
       );
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
 
       const adj = await db.value(
         `insert into adjustments (warehouse_id, reason_code_id, status, created_by)
@@ -299,8 +339,7 @@ describe("stock_available applies the QC gate everywhere", () => {
           w.locations.storage,
         ],
       );
-      await db.post("transfer", tr);
-      await db.post("transfer", tr);
+      await db.post("transfer", tr); // one step: same warehouse (D-44)
 
       expect(await db.onHand(w.products.lotTracked, w.locations.storage, lot)).toBe(25);
       expect(

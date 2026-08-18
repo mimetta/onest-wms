@@ -21,6 +21,9 @@ const nextTag = () =>
  * three products covering all three tracking modes, and one user per role.
  */
 export async function seedWorld(db: Db) {
+  // Setup runs as the owner: creating a warehouse from nothing is not a user
+  // action, and making it pass RLS would mean inventing a bootstrap admin.
+  await db.asOwner();
   const t = nextTag();
 
   // is_default stays false: a partial unique index allows exactly one default
@@ -209,7 +212,10 @@ export async function giveStock(
     actor: string;
   },
 ) {
-  await db.actAs(w.users.admin);
+  // Arranging stock is setup, so it runs as the owner. The posting call below
+  // still goes through post_document() as the admin, because that is the part
+  // under test everywhere else.
+  await db.asOwner();
   const adj = await db.value(
     `insert into adjustments (warehouse_id, reason_code_id, status, created_by)
      values ($1, $2, 'approved', $3) returning id`,
@@ -229,7 +235,41 @@ export async function giveStock(
       opts.locationId,
     ],
   );
+  await db.setupAs(w.users.admin);
   await db.post("adjustment", adj);
-  await db.actAs(opts.actor);
+
+  // Leave the session as the caller's actor but WITHOUT RLS, because this is
+  // still setup. A test that cares about policies calls actAs() itself
+  // immediately afterwards; one that only wants stock on a shelf should not
+  // have to.
+  await db.setupAs(opts.actor);
   return adj;
+}
+
+/**
+ * A second warehouse, with the in_transit bin every transfer out of it needs.
+ *
+ * Setup, so it runs as the owner. Codes carry the world's tag (D-23) so two
+ * tests running against the same database cannot collide on a unique barcode.
+ */
+export async function secondWarehouse(db: Db, w: World) {
+  await db.asOwner();
+
+  const wh = await db.value(
+    `insert into warehouses (code, name_th, name_en, is_default)
+     values ($1, 'คลังสอง', 'Second', false) returning id`,
+    [`WH2-${w.tag}`],
+  );
+  const bin = await db.value(
+    `insert into locations (warehouse_id, code, barcode, type)
+     values ($1, $2, $2, 'storage') returning id`,
+    [wh, `S-01-01-${w.tag}`],
+  );
+  await db.query(
+    `insert into locations (warehouse_id, code, barcode, type)
+     values ($1, $2, $2, 'in_transit')`,
+    [wh, `IN-TRANSIT-WH2-${w.tag}`],
+  );
+
+  return { wh, bin };
 }

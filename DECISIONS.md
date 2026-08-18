@@ -1263,3 +1263,127 @@ decision and should say so.
 the most likely cause rather than a confirmed one. If it still feels unreliable, the useful
 detail is *which* — a tap doing nothing, the first tap of several being ignored, or the wrong
 tab activating.
+
+---
+
+## D-44 — A transfer inside one warehouse posts in one step
+
+*Decided 18 Aug 2026, on the Phase 2 plan.*
+
+A transfer between warehouses posts twice: dispatch moves stock into a virtual `in_transit`
+bin, receive takes it out at the far end. That exists for a real reason (D-05) — stock on a
+lorry is neither here nor there, and somebody asking "where is it?" deserves an answer.
+
+Inside one warehouse, none of that applies. A putaway from RECEIVING to STORAGE is a
+twenty-second walk. So `post_document()` now chooses the leg from the document —
+`from_warehouse_id = to_warehouse_id` posts a single hop straight to `posted` — rather than
+from the document type.
+
+**Reasoning.** The two-step flow was not merely tedious for an internal move, it was
+*dangerous*: a forgotten second leg parks real stock in a virtual bin, where the shelf holds
+drums that the system says are on a lorry that does not exist, and no picker will ever find
+them. A control that is skipped in practice is worse than no control, because the record
+claims it happened.
+
+**Consequences.** The movement path for an internal putaway is one row instead of two, and
+reads the way the stock actually travelled — visible in the loop test, whose expected path
+went from four hops to three. Cross-warehouse transfers are unchanged. `in_transit` bins now
+only ever hold stock that is genuinely between sites, which makes a non-zero balance there a
+meaningful exception rather than routine noise.
+
+---
+
+## D-45 — A requisition is numbered at approval and can never be posted
+
+*Decided 18 Aug 2026, on the Phase 2 plan.*
+
+ใบขอเบิก is a *request*. It is satisfied by an issue (ใบเบิก), which is the document that
+moves the stock. Its lifecycle therefore ends at `approved`, and `post_document()` refuses it
+outright.
+
+Because every other document is numbered at posting, a requisition would otherwise stay
+unnumbered forever. So `approve_document()` allocates its number at approval instead, guarded
+on `doc_no is null` so a number can never be burned twice.
+
+**Reasoning.** Posting a requisition would move nothing while consuming a document number,
+and would leave two documents that each look like the authoritative record of the same event.
+The number matters because a requisition is exactly the document a person quotes down a
+radio: "เบิกตาม RQ-2026-00042".
+
+---
+
+## D-46 — An issue with no requisition behind it needs its own permission
+
+*Decided 18 Aug 2026, on the Phase 2 plan.*
+
+Warehouse staff always go via a requisition. A manager or admin may raise a direct issue,
+gated on a new `issue.create_direct` permission, enforced in the `issues` INSERT policy:
+
+```sql
+requisition_id is not null or has_perm('issue.create_direct')
+```
+
+**Reasoning.** With a requisition behind every issue, the ledger records who *asked* for the
+stock, not just who handed it over — which is the question asked when a month's consumption
+looks wrong. The manager exemption exists because a line stoppage does not wait for
+paperwork, but it is a deliberate, separately-granted act rather than a silent default.
+
+It lives in the policy rather than a trigger because it is a question about who may write the
+row, which is what policies are for. Permission-as-data (D-20) means widening this later is a
+row, not a migration to a function body.
+
+---
+
+## D-47 — A document can only be INSERTed as a draft
+
+*Found by the Phase 2 test suite, 18 Aug 2026.*
+
+The document INSERT policies checked the permission and the author but said nothing about
+`status`. Anyone holding `<type>.create` could insert a row that was already `approved`. All
+eight policies now require `status = 'draft'`.
+
+**How bad it was:** not a way past the approval chain. Two other layers held — the line
+policies refuse to attach lines to a non-draft header, and the workflow trigger refuses
+`draft -> approved` — so the worst reachable outcome was an empty approved shell cluttering
+the document centre. That was established by probing each path, not assumed.
+
+**Reasoning.** "The other two layers happened to contain it" is not a reason to leave a
+policy permitting the exact thing it exists to forbid. The containment was incidental: the
+line policy exists to stop edits after approval, not to backstop the INSERT policy, and a
+future change to either could quietly turn a cosmetic defect into a privilege escalation.
+
+**Consequences.** Three tests now assert the three layers *separately* — a suite that only
+proved "the bypass fails" would stay green if two of the three were removed.
+
+---
+
+## D-48 — The test harness has two deliberate modes, and the default is RLS-on
+
+*Found 18 Aug 2026, extending D-38.*
+
+D-38 established that a test setting up state as `postgres` proves the operation, not the
+path to it. Writing the Phase 2 suite found the deeper version of the same blindness: because
+RLS is `ENABLE` not `FORCE` (D-19), the table-owning `postgres` role bypasses *every* policy.
+The harness had never exercised RLS at all. Two tests that asserted a viewer could not insert
+a document were passing while the viewer's insert succeeded.
+
+The harness now offers two modes, and the distinction is the point:
+
+- `actAs(user)` — sets the JWT claims **and** `set local role authenticated`. RLS applies.
+  This is the default for anything asserting *authority*: who may raise, approve or post what.
+- `setupAs(user)` — sets the claims only, staying the owning role. RLS is bypassed. Used by
+  the ledger and posting suites, which ask whether posting enforces its invariants and reach
+  that question fastest by arranging a document directly.
+
+**Reasoning.** Both questions are worth asking and they are genuinely different. Forcing every
+test through the full chain would make the posting tests slow to read and would couple a
+question about the ledger to the state of the approval rules. But the opt-out has to be
+*named at the call site*, so that a test which silently bypasses the policies looks like it
+does.
+
+**Consequences.** Enforcing RLS surfaced 29 failures, all but three of which were tests
+shortcutting a workflow rather than defects. The three real ones were D-44, D-45 and D-46 —
+decided behaviour that had not been built — and the sweep also turned up D-47. Immutability
+is now asserted in both modes: as the owner the trigger fires ("append-only"), and as a
+signed-in user the missing UPDATE/DELETE grant fires first ("permission denied"). Asserting
+only the trigger message would hide the day a grant is handed out by mistake.

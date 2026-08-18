@@ -40,11 +40,50 @@ export class Db {
   }
 
   /**
-   * Impersonate a user for the rest of the transaction. auth.uid() reads the
-   * `request.jwt.claims` GUC, which is how Supabase passes identity into SQL,
-   * so setting it here exercises the same code path production uses.
+   * Impersonate a user for the rest of the transaction.
+   *
+   * Two things happen, and the second one matters more than it looks:
+   *
+   * 1. `request.jwt.claims` is set, which is how Supabase passes identity into
+   *    SQL — so auth.uid() and has_perm() behave exactly as in production.
+   * 2. The session ROLE is switched to `authenticated`.
+   *
+   * Without (2) the connection stays `postgres`, which OWNS these tables — and
+   * RLS is ENABLE, not FORCE (D-19), so the owner bypasses every policy. Tests
+   * would then check the SECURITY DEFINER functions' own permission logic and
+   * silently skip RLS entirely. That is the same blindness as D-38, one layer
+   * down: proving the operation while never touching the guard.
    */
   async actAs(userId: string) {
+    await this.client.query("select set_config('request.jwt.claims', $1, true)", [
+      JSON.stringify({ sub: userId, role: "authenticated" }),
+    ]);
+    await this.client.query("set local role authenticated");
+  }
+
+  /**
+   * Drop back to the owning role for fixture setup.
+   *
+   * Building a test world is not a thing any real user does, so it does not
+   * have to pass RLS — but everything a test then ASSERTS about should.
+   */
+  async asOwner() {
+    await this.client.query("reset role");
+  }
+
+  /**
+   * Set identity WITHOUT enforcing RLS — claims only, still the owning role.
+   *
+   * This is a deliberate opt-out, used by the ledger and posting tests. Those
+   * ask "does posting enforce the invariants?" and reach that question fastest
+   * by arranging a document directly. `has_perm()` and `auth.uid()` still work,
+   * so permission assertions inside the RPCs remain honest.
+   *
+   * Tests about AUTHORITY — who may raise, approve or post what — must use
+   * actAs() instead, or they prove nothing about the policies.
+   */
+  async setupAs(userId: string) {
+    await this.client.query("reset role");
     await this.client.query("select set_config('request.jwt.claims', $1, true)", [
       JSON.stringify({ sub: userId, role: "authenticated" }),
     ]);

@@ -61,7 +61,7 @@ describe("sufficiency is checked at the source bin, not at 'available' stock", (
         [cs, w.products.untracked, w.uoms.pcs, w.locations.consignment],
       );
 
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
       const docNo = await db.post("consignment_settlement", cs);
       expect(docNo).toMatch(/^CS-\d{4}-\d{5}$/);
       expect(await db.onHand(w.products.untracked, w.locations.consignment)).toBe(3);
@@ -94,7 +94,7 @@ describe("sufficiency is checked at the source bin, not at 'available' stock", (
       );
 
       // qc holds lot.dispose_unpassed, so this must succeed.
-      await db.actAs(w.users.qc);
+      await db.setupAs(w.users.qc);
       const docNo = await db.post("adjustment", adj);
       expect(docNo).toMatch(/^AJ-\d{4}-\d{5}$/);
       expect(await db.onHand(w.products.lotTracked, w.locations.qcHold, lot)).toBe(0);
@@ -132,7 +132,7 @@ describe("sufficiency is checked at the source bin, not at 'available' stock", (
         [adj, w.products.lotTracked, lot, w.uoms.kg, w.locations.qcHold],
       );
 
-      await db.actAs(w.users.manager);
+      await db.setupAs(w.users.manager);
       const msg = await db.expectError(() => db.post("adjustment", adj));
       expect(msg).toContain("lot.dispose_unpassed");
     });
@@ -162,7 +162,7 @@ describe("sufficiency is checked at the source bin, not at 'available' stock", (
         [iss, w.products.untracked, w.uoms.pcs, w.locations.storage2],
       );
 
-      await db.actAs(w.users.staff);
+      await db.setupAs(w.users.staff);
       const msg = await db.expectError(() => db.post("issue", iss));
       expect(msg).toContain("insufficient stock");
     });
@@ -195,7 +195,7 @@ describe("the QC gate applies by movement class", () => {
         [iss, w.products.lotTracked, lot, w.uoms.kg, w.locations.picking],
       );
 
-      await db.actAs(w.users.staff);
+      await db.setupAs(w.users.staff);
       const msg = await db.expectError(() => db.post("issue", iss));
       expect(msg).toContain("QC status");
     });
@@ -226,7 +226,7 @@ describe("the QC gate applies by movement class", () => {
         [iss, w.products.lotTracked, lot, w.uoms.kg, w.locations.picking],
       );
 
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
       const msg = await db.expectError(() =>
         db.post("issue", iss, { overrideNegative: true, reason: "please" }),
       );
@@ -257,7 +257,7 @@ describe("the QC gate applies by movement class", () => {
         [iss, w.products.untracked, w.uoms.pcs, w.locations.quarantine],
       );
 
-      await db.actAs(w.users.staff);
+      await db.setupAs(w.users.staff);
       const msg = await db.expectError(() => db.post("issue", iss));
       expect(msg).toContain("not cleared for issue");
     });
@@ -296,9 +296,8 @@ describe("the QC gate applies by movement class", () => {
         ],
       );
 
-      await db.actAs(w.users.staff);
-      await db.post("transfer", tr);
-      await db.post("transfer", tr);
+      await db.setupAs(w.users.staff);
+      await db.post("transfer", tr); // one step: same warehouse (D-44)
 
       expect(await db.onHand(w.products.lotTracked, w.locations.storage, lot)).toBe(200);
     });
@@ -309,7 +308,7 @@ describe("negative stock", () => {
   it("is blocked by default", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
 
       const iss = await db.value(
         `insert into issues (warehouse_id, department_id, status, created_by)
@@ -331,7 +330,7 @@ describe("negative stock", () => {
   it("is permitted with the right role and a reason, and is audited", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
 
       const iss = await db.value(
         `insert into issues (warehouse_id, department_id, status, created_by)
@@ -363,7 +362,7 @@ describe("negative stock", () => {
   it("refuses an override without a reason", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
 
       const iss = await db.value(
         `insert into issues (warehouse_id, department_id, status, created_by)
@@ -387,7 +386,7 @@ describe("negative stock", () => {
   it("refuses an override from a role that lacks the permission", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.staff);
+      await db.setupAs(w.users.staff);
 
       const iss = await db.value(
         `insert into issues (warehouse_id, department_id, status, created_by)
@@ -413,7 +412,7 @@ describe("document workflow and numbering", () => {
   it("allocates sequential numbers per type per year", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
 
       const numbers: string[] = [];
       for (let i = 0; i < 3; i++) {
@@ -446,7 +445,7 @@ describe("document workflow and numbering", () => {
   it("refuses to post a document that is not approved", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
 
       const adj = await db.value(
         `insert into adjustments (warehouse_id, reason_code_id, status, created_by)
@@ -462,7 +461,7 @@ describe("document workflow and numbering", () => {
   it("refuses to cancel a posted document", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
 
       const adj = await db.value(
         `insert into adjustments (warehouse_id, reason_code_id, status, created_by)
@@ -487,7 +486,7 @@ describe("document workflow and numbering", () => {
   it("rejects an illegal status jump", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
 
       const adj = await db.value(
         `insert into adjustments (warehouse_id, reason_code_id, status, created_by)
@@ -532,7 +531,7 @@ describe("serials", () => {
         [iss, w.products.serialTracked, serial, w.uoms.pcs, w.locations.storage2],
       );
 
-      await db.actAs(w.users.staff);
+      await db.setupAs(w.users.staff);
       const msg = await db.expectError(() => db.post("issue", iss));
       expect(msg).toMatch(/insufficient stock|is not at location/);
     });
@@ -546,7 +545,7 @@ describe("the whole loop", () => {
       const p = w.products.lotTracked;
 
       // 1. Receive two drums into qc_hold, lot pending.
-      await db.actAs(w.users.staff);
+      await db.setupAs(w.users.staff);
       const lot = await makeLot(db, p, "L-2026-001");
       const gr = await db.value(
         `insert into goods_receipts (warehouse_id, partner_id, status, created_by)
@@ -566,11 +565,11 @@ describe("the whole loop", () => {
       expect(await db.onHand(p, w.locations.qcHold, lot)).toBe(400);
 
       // 2. QC passes the lot.
-      await db.actAs(w.users.qc);
+      await db.setupAs(w.users.qc);
       await db.query("update lots set qc_status = 'passed' where id = $1", [lot]);
 
       // 3. Put away into picking.
-      await db.actAs(w.users.staff);
+      await db.setupAs(w.users.staff);
       const tr = await db.value(
         `insert into transfers
            (warehouse_id, from_warehouse_id, to_warehouse_id, status, created_by)
@@ -583,8 +582,7 @@ describe("the whole loop", () => {
          values ($1, 1, $2, $3, 400, $4, $5, $6)`,
         [tr, p, lot, w.uoms.kg, w.locations.qcHold, w.locations.picking],
       );
-      await db.post("transfer", tr);
-      await db.post("transfer", tr);
+      await db.post("transfer", tr); // one step: same warehouse (D-44)
 
       // Now it is genuinely available.
       const avail = await db.one("select qty from stock_available where lot_id = $1", [
@@ -615,10 +613,14 @@ describe("the whole loop", () => {
            from stock_movement_path where lot_id = $1 order by movement_id`,
         [lot],
       );
+      // Three hops, not four: the putaway is a single move inside one
+      // warehouse now (D-44), so the path no longer detours through a virtual
+      // in_transit bin that the stock was never physically in. This is the
+      // clearest argument for the decision — the history reads the way the
+      // drum actually travelled.
       expect(path).toEqual([
         { from_location_code: null, to_location_code: w.codes.qcHold },
-        { from_location_code: w.codes.qcHold, to_location_code: w.codes.inTransit },
-        { from_location_code: w.codes.inTransit, to_location_code: w.codes.picking },
+        { from_location_code: w.codes.qcHold, to_location_code: w.codes.picking },
         { from_location_code: w.codes.picking, to_location_code: null },
       ]);
     });
@@ -652,7 +654,7 @@ describe("document workflow RPCs", () => {
   it("walks a draft through submitted on the way to approved", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
       const adj = await draftAdjustment(db, w);
 
       await db.query("select approve_document('adjustment', $1)", [adj]);
@@ -674,7 +676,7 @@ describe("document workflow RPCs", () => {
   it("lets an approved document post", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
       const adj = await draftAdjustment(db, w);
 
       await db.query("select approve_document('adjustment', $1)", [adj]);
@@ -686,11 +688,11 @@ describe("document workflow RPCs", () => {
   it("refuses to approve without the permission", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
       const adj = await draftAdjustment(db, w);
 
       // warehouse_staff can create an adjustment but not approve one.
-      await db.actAs(w.users.staff);
+      await db.setupAs(w.users.staff);
       const msg = await db.expectError(() =>
         db.query("select approve_document('adjustment', $1)", [adj]),
       );
@@ -701,7 +703,7 @@ describe("document workflow RPCs", () => {
   it("refuses to cancel a posted document", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
       const adj = await draftAdjustment(db, w);
 
       await db.query("select approve_document('adjustment', $1)", [adj]);
@@ -717,7 +719,7 @@ describe("document workflow RPCs", () => {
   it("requires a reason to cancel", async () => {
     await withRollback(async (db) => {
       const w = await seedWorld(db);
-      await db.actAs(w.users.admin);
+      await db.setupAs(w.users.admin);
       const adj = await draftAdjustment(db, w);
 
       const msg = await db.expectError(() =>
