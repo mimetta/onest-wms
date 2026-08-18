@@ -54,7 +54,7 @@ export default async function MasterDataPage() {
   ] as const;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader title={t("title")} subtitle={t("subtitle")} />
 
       <div className="grid gap-4 sm:grid-cols-2">

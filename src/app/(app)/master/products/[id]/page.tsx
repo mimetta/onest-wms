@@ -41,7 +41,7 @@ export default async function EditProductPage({
   const trackingEditable = (movements ?? 0) === 0;
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
       <PageHeader
         title={product.sku}
         subtitle={product.name_th}
@@ -76,7 +76,7 @@ export default async function EditProductPage({
       {/* Cost is admin/manager/viewer only — never on a warehouse screen (D-34). */}
       {can(user, "cost.read") && <PriceHistory productId={id} />}
 
-      <Card className="flex flex-col gap-3 px-6 py-5">
+      <Card className="flex flex-col gap-3 px-4 py-3 sm:px-6 sm:py-5">
         <SectionLabel>{t("barcodes")}</SectionLabel>
         {!barcodes || barcodes.length === 0 ? (
           <p className="text-brand-muted text-sm">{t("noBarcodes")}</p>

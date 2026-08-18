@@ -149,7 +149,7 @@ export default async function LabelsPage({
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader title={t("title")} subtitle={t("subtitle")} />
 
       {/* Nothing here mints a new identifier — worth saying plainly, because

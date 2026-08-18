@@ -74,7 +74,7 @@ export function LabelPicker({
 
   return (
     <div className="flex flex-col gap-4">
-      <Card className="flex flex-col gap-4 px-6 py-5">
+      <Card className="flex flex-col gap-4 px-4 py-3 sm:px-6 sm:py-5">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <SectionLabel>{t("selectItems")}</SectionLabel>
           <div className="flex items-center gap-2">

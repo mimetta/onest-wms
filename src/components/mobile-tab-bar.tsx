@@ -1,33 +1,33 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { NavItem } from "./nav-links";
 import { NAV_ICONS, IconMore } from "./nav-icons";
 
 /**
  * Bottom tab bar, mobile only.
  *
- * The first attempt put every destination in the top bar and let it scroll
- * sideways. On a 390px handheld that left roughly 110px for links, so Receive —
- * the screen a receiver opens dozens of times a shift — was reachable only by a
- * blind horizontal swipe inside a 40px strip. The reasoning behind that design
- * (don't bury frequently-used destinations) was right; the execution failed it.
+ * The first attempt let the top bar scroll sideways, which at 390px left about
+ * 110px for links and buried Receive behind a blind swipe. A bottom bar puts
+ * the four most-used destinations in the thumb arc.
  *
- * A bottom bar fixes both halves: the four most-used destinations sit in the
- * thumb arc of a hand holding the device, and the rest live behind an explicit
- * "More" sheet rather than an invisible scroll.
+ * Round two of field feedback said tapping "feels unreliable". The targets were
+ * never the problem — they are 64px tall and roughly 78px wide, comfortably
+ * past the 44px minimum, and the safe-area inset was already applied. The
+ * problem was FEEDBACK (D-43): globals.css sets
+ * `-webkit-tap-highlight-color: transparent` so a mis-tap cannot flash a label,
+ * and nothing replaced it. A tap that registered showed absolutely nothing
+ * until the next page rendered — which over warehouse Wi-Fi is long enough to
+ * read as "it ignored me", and long enough to tap again.
  *
- * Four visible tabs, not five: warehouse staff often work in gloves, and a
- * 390px screen split five ways gives ~78px targets. Four gives ~97px.
+ * So every tab now has an instant pressed state and a navigation-pending state.
  */
 export function MobileTabBar({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
-  // Priority order for the small screen. Whatever the user has permission for,
-  // in this order, fills the four slots; everything else goes to More.
   const PRIORITY = ["/", "/receive", "/stock", "/qc", "/documents"] as const;
 
   const ranked = [...items].sort((a, b) => {
@@ -44,7 +44,6 @@ export function MobileTabBar({ items }: { items: NavItem[] }) {
 
   return (
     <>
-      {/* Sheet for everything that did not fit. */}
       {moreOpen && overflow.length > 0 && (
         <>
           <button
@@ -64,8 +63,8 @@ export function MobileTabBar({ items }: { items: NavItem[] }) {
                       onClick={() => setMoreOpen(false)}
                       className={
                         isActive(item.href)
-                          ? "text-brand-brown flex items-center gap-3 rounded-md px-3 py-3 text-sm font-semibold"
-                          : "text-brand-dark flex items-center gap-3 rounded-md px-3 py-3 text-sm"
+                          ? "text-brand-brown active:bg-brand-cream flex items-center gap-3 rounded-md px-3 py-3 text-sm font-semibold"
+                          : "text-brand-dark active:bg-brand-cream flex items-center gap-3 rounded-md px-3 py-3 text-sm"
                       }
                     >
                       {Icon && <Icon className="size-5" />}
@@ -79,7 +78,6 @@ export function MobileTabBar({ items }: { items: NavItem[] }) {
         </>
       )}
 
-      {/* pb from safe-area so the bar clears the iOS home indicator. */}
       <nav className="border-brand-border fixed right-0 bottom-0 left-0 z-40 border-t bg-white pb-[env(safe-area-inset-bottom)] sm:hidden">
         <ul className="flex">
           {primary.map((item) => {
@@ -90,24 +88,14 @@ export function MobileTabBar({ items }: { items: NavItem[] }) {
                 <Link
                   href={item.href}
                   aria-current={active ? "page" : undefined}
-                  className={
-                    active
-                      ? "text-brand-brown flex h-16 flex-col items-center justify-center gap-1 px-1"
-                      : "text-brand-muted flex h-16 flex-col items-center justify-center gap-1 px-1"
-                  }
+                  // touch-manipulation removes the double-tap-to-zoom delay,
+                  // which is another few hundred milliseconds of "nothing
+                  // happened" on a tab bar.
+                  className="block touch-manipulation"
                 >
-                  {Icon && <Icon className="size-6" />}
-                  {/* Label as well as icon: an icon alone is a guess, and these
-                      are Thai words a pictogram cannot carry. */}
-                  <span
-                    className={
-                      active
-                        ? "max-w-full truncate text-[11px] font-semibold"
-                        : "max-w-full truncate text-[11px]"
-                    }
-                  >
-                    {item.label}
-                  </span>
+                  <TabInner active={active} label={item.label}>
+                    {Icon && <Icon className="size-6" />}
+                  </TabInner>
                 </Link>
               </li>
             );
@@ -121,8 +109,8 @@ export function MobileTabBar({ items }: { items: NavItem[] }) {
                 aria-expanded={moreOpen}
                 className={
                   overflow.some((i) => isActive(i.href))
-                    ? "text-brand-brown flex h-16 w-full flex-col items-center justify-center gap-1 px-1"
-                    : "text-brand-muted flex h-16 w-full flex-col items-center justify-center gap-1 px-1"
+                    ? "text-brand-brown active:bg-brand-cream flex h-16 w-full touch-manipulation flex-col items-center justify-center gap-1 px-1"
+                    : "text-brand-muted active:bg-brand-cream flex h-16 w-full touch-manipulation flex-col items-center justify-center gap-1 px-1"
                 }
               >
                 <IconMore className="size-6" />
@@ -133,5 +121,46 @@ export function MobileTabBar({ items }: { items: NavItem[] }) {
         </ul>
       </nav>
     </>
+  );
+}
+
+/**
+ * The tab's visible body, separated so it can call useLinkStatus — which only
+ * reports the pending state of its enclosing Link.
+ *
+ * Two distinct signals: `active:` fires the instant a finger lands, and
+ * `pending` covers the gap between that and the new page painting. Together
+ * they mean a tap is never silent.
+ */
+function TabInner({
+  active,
+  label,
+  children,
+}: {
+  active: boolean;
+  label: string;
+  children: ReactNode;
+}) {
+  const { pending } = useLinkStatus();
+
+  return (
+    <span
+      className={[
+        "flex h-16 flex-col items-center justify-center gap-1 px-1 transition-colors",
+        active || pending ? "text-brand-brown" : "text-brand-muted",
+        pending ? "bg-brand-cream" : "active:bg-brand-cream",
+      ].join(" ")}
+    >
+      {children}
+      <span
+        className={
+          active || pending
+            ? "max-w-full truncate text-[11px] font-semibold"
+            : "max-w-full truncate text-[11px]"
+        }
+      >
+        {label}
+      </span>
+    </span>
   );
 }

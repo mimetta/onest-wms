@@ -301,7 +301,7 @@ export function ReceiveClient({
       />
 
       {pending && typedStep && (
-        <Card className="border-l-scan-ok flex flex-col gap-3 border-l-8 px-6 py-5">
+        <Card className="border-l-scan-ok flex flex-col gap-3 border-l-8 px-4 py-3 sm:px-6 sm:py-5">
           <div className="flex flex-col">
             <span className="text-brand-dark text-lg font-semibold">
               {pending.nameTh}
@@ -376,7 +376,7 @@ export function ReceiveClient({
 
       {message && <Banner tone={message.tone}>{message.text}</Banner>}
 
-      <Card className="flex flex-col gap-3 px-6 py-5">
+      <Card className="flex flex-col gap-3 px-4 py-3 sm:px-6 sm:py-5">
         <div className="flex items-baseline justify-between">
           <SectionLabel>{t("lines")}</SectionLabel>
           <span className="text-brand-subtle text-xs">

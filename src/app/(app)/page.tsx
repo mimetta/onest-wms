@@ -125,10 +125,12 @@ export default async function DashboardPage() {
   const fmt = (n: number) => format.number(n, { maximumFractionDigits: 0 });
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader title={t("title")} subtitle={t("subtitle")} />
 
-      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      {/* Two-up on a phone: five full-width tiles would be five screens of
+          scrolling before any panel (D-43). */}
+      <section className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-5">
         <Stat label={t("onHand")} value={fmt(totals.onHand)} />
         <Stat label={t("available")} value={fmt(totals.available)} tone="good" />
         <Stat label={t("inQc")} value={fmt(totals.inQc)} tone="warn" />
@@ -136,9 +138,9 @@ export default async function DashboardPage() {
         <Stat label={t("atConsignment")} value={fmt(totals.atConsignment)} />
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
         {/* D-22 compensating control, part one. */}
-        <Card className="flex flex-col gap-3 px-6 py-5">
+        <Card className="flex flex-col gap-3 px-4 py-3 sm:px-6 sm:py-5">
           <div className="flex items-baseline justify-between gap-2">
             <SectionLabel>{t("receiptsToday")}</SectionLabel>
             <span className="tabular text-brand-dark text-lg font-semibold">
@@ -173,14 +175,14 @@ export default async function DashboardPage() {
         </Card>
 
         {/* D-22 compensating control, part two. */}
-        <Card className="flex flex-col gap-3 px-6 py-5">
+        <Card className="flex flex-col gap-3 px-4 py-3 sm:px-6 sm:py-5">
           <SectionLabel>{t("activity")}</SectionLabel>
           <ActivityFeed initial={activity} />
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="flex flex-col gap-3 px-6 py-5">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
+        <Card className="flex flex-col gap-3 px-4 py-3 sm:px-6 sm:py-5">
           <div className="flex items-baseline justify-between gap-2">
             <SectionLabel>{t("expiryTimeline")}</SectionLabel>
             <Link href="/qc" className="text-brand-brown text-xs">
@@ -224,7 +226,7 @@ export default async function DashboardPage() {
           )}
         </Card>
 
-        <Card className="flex flex-col gap-3 px-6 py-5">
+        <Card className="flex flex-col gap-3 px-4 py-3 sm:px-6 sm:py-5">
           <SectionLabel>{t("movers")}</SectionLabel>
           {!velocity || velocity.length === 0 ? (
             <p className="text-brand-muted text-sm">{t("noMovement")}</p>
@@ -251,7 +253,7 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <Card className="flex flex-col gap-1 px-6 py-5">
+      <Card className="flex flex-col gap-1 px-4 py-3 sm:px-6 sm:py-5">
         <SectionLabel>{t("alerts")}</SectionLabel>
         <p className="text-brand-muted text-sm">{t("alertsPlaceholder")}</p>
       </Card>
@@ -276,16 +278,19 @@ function Stat({
   tone?: "good" | "warn";
 }) {
   return (
-    <Card className="px-6 py-5">
-      <div className="text-brand-subtle text-xs tracking-wider uppercase">{label}</div>
+    <Card className="px-3 py-2 sm:px-6 sm:py-5">
+      <div className="text-brand-subtle truncate text-[10px] tracking-wider uppercase sm:text-xs">
+        {label}
+      </div>
       <div
-        className={
+        className={[
+          "tabular mt-0.5 text-xl font-semibold sm:mt-1 sm:text-2xl",
           tone === "good"
-            ? "tabular text-success-fg mt-1 text-2xl font-semibold"
+            ? "text-success-fg"
             : tone === "warn"
-              ? "tabular text-warning-text mt-1 text-2xl font-semibold"
-              : "tabular text-brand-dark mt-1 text-2xl font-semibold"
-        }
+              ? "text-warning-text"
+              : "text-brand-dark",
+        ].join(" ")}
       >
         {value}
       </div>

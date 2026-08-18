@@ -1216,3 +1216,50 @@ climbing with `frame 640×480` means resolution; `attempts` at zero means frames
 reaching the decoder at all; a `cam` label naming an ultra-wide lens means the wrong camera
 was selected. Each points somewhere different, and none of them are guessable from "it does
 not scan".
+
+---
+
+## D-43 — Mobile density and layout are a separate register, not a squeezed desktop
+
+**Date:** 2026-08-18 · **Status:** Accepted (field feedback) · **Phase:** 1 polish
+**Invokes:** the legibility clause of D-25
+
+**Context.** Second round of feedback from real phone use: the bottom tab bar felt
+unreliable to tap, tables did not work at all, and the screen held very little.
+
+**Tapping.** The targets were never the problem — 64 px tall, ~78 px wide, past the 44 px
+minimum, with the safe-area inset already applied. The cause was **feedback**: `globals.css`
+sets `-webkit-tap-highlight-color: transparent` so a mis-tap cannot flash a label, and
+nothing replaced it. A tap that registered showed *nothing at all* until the next page
+painted — over warehouse Wi-Fi, long enough to read as "ignored" and to tap again.
+
+Fixed with two distinct signals: `:active` fires the instant a finger lands, and Next 16's
+`useLinkStatus` covers the gap until the new page renders. Plus `touch-manipulation`, which
+removes the double-tap-zoom delay. A control that suppresses the platform's own feedback owes
+the user a replacement.
+
+**Tables.** A six-column table at 390 px either scrolls sideways, hiding the columns that
+matter, or squeezes every cell into two words. `RecordList` renders a table from `sm` up and
+stacked cards below, from **one column definition** — each column declares a role (primary,
+secondary, meta, trailing) and both renderers read it. The alternative, a `hidden sm:block`
+table beside a `sm:hidden` card list, duplicates every definition and guarantees one of them
+eventually drifts.
+
+**Density.** The Mimetta palette specifies `px-6 py-5` cards, which is right at a desk and
+too airy at 390 px. Cards are now `px-4 py-3` on mobile, page rhythm `gap-4` instead of
+`gap-6`, dashboard tiles two-up rather than stacked.
+
+**Reasoning.** This is D-25 applied to spacing rather than colour: the brand's proportions
+are kept where there is room for them and traded for content where there is not. A brand
+rule that leaves a warehouse worker scrolling past four tiles to reach a number is not being
+honoured, it is being obeyed.
+
+**Consequences.** Two layouts exist for lists, which is real cost — but concentrated in one
+component rather than spread across six screens. New list screens should use `RecordList`
+rather than a bare `<Table>`; a table with more than about three columns is a desktop-only
+decision and should say so.
+
+**Not diagnosed:** the specific tap symptom was left blank in the report, so the fix targets
+the most likely cause rather than a confirmed one. If it still feels unreliable, the useful
+detail is *which* — a tap doing nothing, the first tap of several being ignored, or the wrong
+tab activating.

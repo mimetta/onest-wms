@@ -3,7 +3,8 @@ import { requirePerm } from "@/lib/auth";
 import { SourceBadge } from "@/components/source-badge";
 import { createClient } from "@/lib/supabase/server";
 import { SearchBox } from "@/components/search-box";
-import { Badge, EmptyState, PageHeader, Table, TableWrap, Td, Th } from "@/components/ui";
+import { Badge, EmptyState, PageHeader } from "@/components/ui";
+import { RecordList } from "@/components/record-list";
 
 export default async function PartnersPage({
   searchParams,
@@ -36,53 +37,51 @@ export default async function PartnersPage({
   } as const;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader title={t("partners")} subtitle={t("count", { count: count ?? 0 })} />
       <SearchBox placeholder={t("searchPartners")} />
 
-      {!partners || partners.length === 0 ? (
-        <TableWrap>
-          <EmptyState title={t("noResults")} hint={t("noResultsHint")} />
-        </TableWrap>
-      ) : (
-        <TableWrap>
-          <Table>
-            <thead>
-              <tr>
-                <Th>{t("code")}</Th>
-                <Th>{t("nameTh")}</Th>
-                <Th>{t("partnerType")}</Th>
-                <Th>{t("phone")}</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {partners.map((p) => (
-                <tr key={p.id} className="hover:bg-brand-cream/60">
-                  <Td className="font-mono text-xs whitespace-nowrap">{p.code}</Td>
-                  <Td>
-                    <div className="flex flex-col">
-                      <span className="text-brand-dark">{p.name_th}</span>
-                      {p.name_en && (
-                        <span className="text-brand-subtle text-xs">{p.name_en}</span>
-                      )}
-                    </div>
-                  </Td>
-                  <Td>
-                    <div className="flex flex-wrap gap-1">
-                      <Badge tone={p.type === "supplier" ? "info" : "neutral"}>
-                        {typeLabel[p.type as keyof typeof typeLabel]}
-                      </Badge>
-                      {!p.is_active && <Badge tone="bad">{t("inactive")}</Badge>}
-                      <SourceBadge source={p.source} linkedAt={p.acccloud_linked_at} />
-                    </div>
-                  </Td>
-                  <Td className="text-brand-muted whitespace-nowrap">{p.phone ?? "—"}</Td>
-                </tr>
-              ))}
-            </tbody>
-          </Table>
-        </TableWrap>
-      )}
+      <RecordList
+        items={partners ?? []}
+        rowKey={(p) => p.id}
+        empty={<EmptyState title={t("noResults")} hint={t("noResultsHint")} />}
+        columns={[
+          { key: "code", header: t("code"), role: "primary", cell: (p) => p.code },
+          {
+            key: "name",
+            header: t("nameTh"),
+            role: "secondary",
+            cell: (p) => (
+              <span className="flex flex-col">
+                <span>{p.name_th}</span>
+                {p.name_en && (
+                  <span className="text-brand-subtle text-xs">{p.name_en}</span>
+                )}
+              </span>
+            ),
+          },
+          {
+            key: "phone",
+            header: t("phone"),
+            role: "meta",
+            cell: (p) => p.phone ?? "—",
+          },
+          {
+            key: "type",
+            header: t("partnerType"),
+            role: "trailing",
+            cell: (p) => (
+              <span className="flex flex-wrap justify-end gap-1">
+                <Badge tone={p.type === "supplier" ? "info" : "neutral"}>
+                  {typeLabel[p.type as keyof typeof typeLabel]}
+                </Badge>
+                {!p.is_active && <Badge tone="bad">{t("inactive")}</Badge>}
+                <SourceBadge source={p.source} linkedAt={p.acccloud_linked_at} />
+              </span>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

@@ -6,16 +6,8 @@ import { SourceBadge } from "@/components/source-badge";
 import { PrintLabelLink } from "@/components/print-label-link";
 import { createClient } from "@/lib/supabase/server";
 import { SearchBox } from "@/components/search-box";
-import {
-  Badge,
-  EmptyState,
-  LinkButton,
-  PageHeader,
-  Table,
-  TableWrap,
-  Td,
-  Th,
-} from "@/components/ui";
+import { Badge, EmptyState, LinkButton, PageHeader } from "@/components/ui";
+import { RecordList } from "@/components/record-list";
 
 const PAGE_SIZE = 50;
 
@@ -56,7 +48,7 @@ export default async function ProductsPage({
   } as const;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader
         title={t("products")}
         subtitle={t("count", { count: count ?? 0 })}
@@ -73,68 +65,71 @@ export default async function ProductsPage({
 
       <SearchBox placeholder={t("searchProducts")} />
 
-      {!products || products.length === 0 ? (
-        <TableWrap>
-          <EmptyState title={t("noResults")} hint={t("noResultsHint")} />
-        </TableWrap>
-      ) : (
-        <TableWrap>
-          <Table>
-            <thead>
-              <tr>
-                <Th>{t("sku")}</Th>
-                <Th>{t("nameTh")}</Th>
-                <Th>{t("category")}</Th>
-                <Th>{t("baseUom")}</Th>
-                <Th>{t("tracking")}</Th>
-                <Th />
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => {
-                const uom = p.uoms as unknown as { code: string } | null;
-                const cat = p.product_categories as unknown as {
-                  name_th: string;
-                } | null;
-                return (
-                  <tr key={p.id} className="hover:bg-brand-cream/60">
-                    <Td className="font-mono text-xs whitespace-nowrap">{p.sku}</Td>
-                    <Td>
-                      <div className="flex flex-col">
-                        <span className="text-brand-dark">{p.name_th}</span>
-                        {p.name_en && (
-                          <span className="text-brand-subtle text-xs">{p.name_en}</span>
-                        )}
-                      </div>
-                    </Td>
-                    <Td className="text-brand-muted">{cat?.name_th ?? "—"}</Td>
-                    <Td className="font-mono text-xs">{uom?.code ?? "—"}</Td>
-                    <Td>
-                      <div className="flex flex-wrap gap-1">
-                        <Badge tone={p.tracking_mode === "none" ? "neutral" : "info"}>
-                          {trackingLabel[p.tracking_mode as keyof typeof trackingLabel]}
-                        </Badge>
-                        {p.requires_qc && <Badge tone="info">QC</Badge>}
-                        <SourceBadge source={p.source} linkedAt={p.acccloud_linked_at} />
-                        {!p.is_active && <Badge tone="bad">{t("inactive")}</Badge>}
-                      </div>
-                    </Td>
-                    <Td className="text-right whitespace-nowrap">
-                      <PrintLabelLink kind="product" id={p.id} compact />{" "}
-                      <Link
-                        href={`/master/products/${p.id}`}
-                        className="text-brand-brown hover:text-brand-accent text-sm font-medium"
-                      >
-                        {t("edit")}
-                      </Link>
-                    </Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </Table>
-        </TableWrap>
-      )}
+      <RecordList
+        items={products ?? []}
+        rowKey={(p) => p.id}
+        empty={<EmptyState title={t("noResults")} hint={t("noResultsHint")} />}
+        columns={[
+          { key: "sku", header: t("sku"), role: "primary", cell: (p) => p.sku },
+          {
+            key: "name",
+            header: t("nameTh"),
+            role: "secondary",
+            cell: (p) => (
+              <span className="flex flex-col">
+                <span>{p.name_th}</span>
+                {p.name_en && (
+                  <span className="text-brand-subtle text-xs">{p.name_en}</span>
+                )}
+              </span>
+            ),
+          },
+          {
+            key: "category",
+            header: t("category"),
+            role: "meta",
+            cell: (p) => {
+              const cat = p.product_categories as unknown as { name_th: string } | null;
+              return cat?.name_th ?? "—";
+            },
+          },
+          {
+            key: "uom",
+            header: t("baseUom"),
+            role: "meta",
+            cell: (p) => {
+              const uom = p.uoms as unknown as { code: string } | null;
+              return uom?.code ?? "—";
+            },
+          },
+          {
+            key: "tracking",
+            header: t("tracking"),
+            role: "trailing",
+            cell: (p) => (
+              <span className="flex flex-wrap justify-end gap-1">
+                <Badge tone={p.tracking_mode === "none" ? "neutral" : "info"}>
+                  {trackingLabel[p.tracking_mode as keyof typeof trackingLabel]}
+                </Badge>
+                {p.requires_qc && <Badge tone="info">QC</Badge>}
+                {!p.is_active && <Badge tone="bad">{t("inactive")}</Badge>}
+                <SourceBadge source={p.source} linkedAt={p.acccloud_linked_at} />
+              </span>
+            ),
+          },
+        ]}
+        action={(p) => (
+          <>
+            <PrintLabelLink kind="product" id={p.id} compact />
+            <Link
+              href={`/master/products/${p.id}`}
+              className="text-brand-brown hover:text-brand-accent text-sm font-medium"
+            >
+              {t("edit")}
+            </Link>
+          </>
+        )}
+      />
 
       {(count ?? 0) > PAGE_SIZE && <Pagination page={pageNo} total={count ?? 0} q={q} />}
     </div>

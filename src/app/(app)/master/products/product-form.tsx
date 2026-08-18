@@ -79,7 +79,7 @@ export function ProductForm({
         values.id && <Banner tone="info">{t("identityFromAcccloud")}</Banner>
       )}
 
-      <Card className="flex flex-col gap-4 px-6 py-5">
+      <Card className="flex flex-col gap-4 px-4 py-3 sm:px-6 sm:py-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t("sku")}>
             <Input

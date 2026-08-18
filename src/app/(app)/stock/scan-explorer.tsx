@@ -5,7 +5,7 @@ import { useFormatter, useTranslations } from "next-intl";
 import { ScanField } from "@/components/scan/scan-field";
 import { LinkBarcodeForm } from "./link-barcode-form";
 import { beepAccept, beepReject, beepWarn } from "@/lib/audio/beep";
-import { Badge, Banner, Card, SectionLabel, Table, Td, Th } from "@/components/ui";
+import { Badge, Banner, Card, SectionLabel } from "@/components/ui";
 import { scan, type ScanOutcome } from "./actions";
 import { MovementPath } from "@/components/movement-path";
 import type { ScanSource } from "@/hooks/use-scanner";
@@ -91,7 +91,7 @@ export function ScanExplorer({
       )}
 
       {resolution && resolution.kind !== "unknown" && (
-        <Card className="border-l-scan-ok flex flex-col gap-4 border-l-8 px-6 py-5">
+        <Card className="border-l-scan-ok flex flex-col gap-3 border-l-8 px-4 py-3 sm:gap-4 sm:px-6 sm:py-5">
           {resolution.kind === "product" && (
             <div className="flex flex-col gap-1">
               <SectionLabel>{t("product")}</SectionLabel>
@@ -174,28 +174,29 @@ export function ScanExplorer({
             ) : !outcome?.onHand || outcome.onHand.length === 0 ? (
               <p className="text-brand-muted text-sm">{t("noStock")}</p>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <thead>
-                    <tr>
-                      <Th>
-                        {resolution.kind === "location" ? t("product") : t("location")}
-                      </Th>
-                      <Th>{t("lot")}</Th>
-                      <Th>{t("qty")}</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {outcome.onHand.map((row, i) => (
-                      <tr key={`${row.label}-${row.lotNo}-${i}`}>
-                        <Td className="font-mono text-xs">{row.label}</Td>
-                        <Td className="font-mono text-xs">{row.lotNo ?? "—"}</Td>
-                        <Td className="tabular">{row.qty.toLocaleString()}</Td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
+              /* One row per line rather than a table: three columns at 390px
+                 squeeze a bin code and a lot number into two words each
+                 (D-43). */
+              <ul className="divide-brand-border/60 flex flex-col divide-y">
+                {outcome.onHand.map((row, i) => (
+                  <li
+                    key={`${row.label}-${row.lotNo}-${i}`}
+                    className="flex items-baseline gap-2 py-1.5"
+                  >
+                    <span className="text-brand-dark min-w-0 flex-1 font-mono text-xs">
+                      {row.label}
+                    </span>
+                    {row.lotNo && (
+                      <span className="text-brand-subtle shrink-0 font-mono text-xs">
+                        {row.lotNo}
+                      </span>
+                    )}
+                    <span className="tabular text-brand-dark shrink-0 text-sm font-semibold">
+                      {row.qty.toLocaleString()}
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
 

@@ -40,7 +40,7 @@ export function BinGenerator({
     `${prefix.toUpperCase()}-${String(bay).padStart(2, "0")}-${String(level).padStart(2, "0")}`;
 
   return (
-    <Card className="flex flex-col gap-4 px-6 py-5">
+    <Card className="flex flex-col gap-4 px-4 py-3 sm:px-6 sm:py-5">
       <div className="flex flex-col gap-1">
         <SectionLabel>{t("generateBins")}</SectionLabel>
         <p className="text-brand-muted text-sm">{t("generateHint")}</p>

@@ -30,7 +30,7 @@ export default async function StockPage() {
   ]);
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
       <PageHeader title={t("stockTitle")} subtitle={t("stockSubtitle")} />
       <ScanExplorer
         products={products ?? []}

@@ -36,7 +36,7 @@ export function ZoneForm({
       {values.id && <input type="hidden" name="id" value={values.id} />}
       {state.error && <Banner tone="bad">{t(state.error)}</Banner>}
 
-      <Card className="flex flex-col gap-4 px-6 py-5">
+      <Card className="flex flex-col gap-4 px-4 py-3 sm:px-6 sm:py-5">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label={t("zoneCode")}>
             <Input

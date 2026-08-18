@@ -24,7 +24,7 @@ export default async function ZonesPage() {
     .order("code");
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 sm:gap-6">
       <PageHeader
         title={t("zones")}
         subtitle={t("count", { count: count ?? 0 })}

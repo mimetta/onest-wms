@@ -36,7 +36,7 @@ export default async function EditLocationPage({
   // transfers or opening balances, so the form is not offered at all.
   if (location.is_virtual) {
     return (
-      <div className="flex max-w-3xl flex-col gap-6">
+      <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
         <PageHeader title={location.code} subtitle={location.type} />
         <Banner tone="warn">{t("systemLocation")}</Banner>
       </div>
@@ -44,7 +44,7 @@ export default async function EditLocationPage({
   }
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
       <PageHeader
         title={location.code}
         subtitle={t("editLocation")}

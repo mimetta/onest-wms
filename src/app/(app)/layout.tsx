@@ -13,7 +13,11 @@ export default async function AppLayout({ children }: LayoutProps<"/">) {
     <>
       <Nav user={user} />
       {/* pb-24 on mobile clears the fixed bottom tab bar; sm:pb-6 drops it. */}
-      <main className="mx-auto max-w-[1280px] px-4 pt-6 pb-24 sm:pb-6">{children}</main>
+      {/* Tighter gutters and rhythm on a handheld (D-43); pb-24 clears the
+          fixed bottom tab bar. */}
+      <main className="mx-auto max-w-[1280px] px-3 pt-4 pb-24 sm:px-4 sm:pt-6 sm:pb-6">
+        {children}
+      </main>
     </>
   );
 }

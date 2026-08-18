@@ -45,7 +45,7 @@ export function LinkBarcodeForm({
   }, [state.linkedTo]);
 
   return (
-    <Card className="flex flex-col gap-4 px-6 py-5">
+    <Card className="flex flex-col gap-4 px-4 py-3 sm:px-6 sm:py-5">
       <div className="flex flex-col gap-1">
         <SectionLabel>{t("linkTitle")}</SectionLabel>
         <p className="text-brand-muted text-sm">{t("linkExplain")}</p>

@@ -20,7 +20,7 @@ export default async function ReceivePage() {
   const draft = await ensureDraft();
   if (!draft.ok) {
     return (
-      <div className="flex max-w-3xl flex-col gap-6">
+      <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
         <PageHeader title={t("title")} />
         <Banner tone="bad">{t(draft.error)}</Banner>
       </div>
@@ -72,7 +72,7 @@ export default async function ReceivePage() {
     .maybeSingle();
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
       <PageHeader title={t("title")} subtitle={t("subtitle")} />
       <ReceiveClient
         receiptId={receiptId}

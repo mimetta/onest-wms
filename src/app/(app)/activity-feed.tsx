@@ -96,23 +96,30 @@ export function ActivityFeed({ initial }: { initial: ActivityRow[] }) {
       ) : (
         <ul className="divide-brand-border/60 flex flex-col divide-y">
           {rows.map((row) => (
-            <li key={row.id} className="flex flex-wrap items-baseline gap-x-3 py-2">
-              <span className="text-brand-subtle w-20 shrink-0 text-xs">
-                {format.dateTime(new Date(row.occurredAt), {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-              <span className="text-brand-dark min-w-0 flex-1 truncate text-sm">
-                {row.productName}
-              </span>
-              <span className="tabular text-brand-dark text-sm font-semibold">
-                {row.qty.toLocaleString()} {row.uomCode}
-              </span>
-              <span className="text-brand-subtle font-mono text-xs">
-                {row.fromCode ?? "—"} → {row.toCode ?? "—"}
-              </span>
-              <span className="text-brand-muted text-xs">{row.userName}</span>
+            /* Two lines on a phone, one on a desktop. Five columns at 390px
+               truncated the product name to a single character, which is the
+               one field a person actually reads (D-43). */
+            <li key={row.id} className="flex flex-col gap-0.5 py-1.5 sm:py-2">
+              <div className="flex items-baseline gap-2">
+                <span className="text-brand-dark min-w-0 flex-1 truncate text-sm">
+                  {row.productName}
+                </span>
+                <span className="tabular text-brand-dark shrink-0 text-sm font-semibold">
+                  {row.qty.toLocaleString()} {row.uomCode}
+                </span>
+              </div>
+              <div className="text-brand-subtle flex flex-wrap items-baseline gap-x-2 text-xs">
+                <span>
+                  {format.dateTime(new Date(row.occurredAt), {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                <span className="font-mono">
+                  {row.fromCode ?? "—"} → {row.toCode ?? "—"}
+                </span>
+                <span className="text-brand-muted truncate">{row.userName}</span>
+              </div>
             </li>
           ))}
         </ul>

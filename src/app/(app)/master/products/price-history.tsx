@@ -22,7 +22,7 @@ export async function PriceHistory({ productId }: { productId: string }) {
     .limit(20);
 
   return (
-    <Card className="flex flex-col gap-3 px-6 py-5">
+    <Card className="flex flex-col gap-3 px-4 py-3 sm:px-6 sm:py-5">
       <SectionLabel>{t("priceHistory")}</SectionLabel>
 
       {!prices || prices.length === 0 ? (

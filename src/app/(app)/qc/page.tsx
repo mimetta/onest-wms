@@ -76,7 +76,7 @@ export default async function QcPage({
   };
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
       <PageHeader
         title={t("title")}
         subtitle={tab === "pending_qc" ? t("oldestFirst") : t("subtitle")}

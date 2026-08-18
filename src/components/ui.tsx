@@ -9,17 +9,31 @@ import Link from "next/link";
  * makes a palette change one edit rather than a search-and-replace. White is
  * the only surface background, brand.border is the only border colour, and
  * hovers swap green -> terracotta rather than dimming.
+ *
+ * DENSITY (D-43). The palette specifies px-6 py-5 cards, which is right at a
+ * desk and too airy at 390px — field feedback was that a phone screen holds
+ * almost nothing. Cards are therefore px-4 py-3 on mobile and px-6 py-5 from
+ * `sm` up. This is the legibility clause of D-25 applied to spacing rather than
+ * colour: the brand's proportions are kept where there is room for them, and
+ * traded for content where there is not.
  */
 
 export function Card({
   children,
   className = "",
+  padded = false,
 }: {
   children: ReactNode;
   className?: string;
+  /** Apply the standard responsive padding. Omit when the caller sets its own. */
+  padded?: boolean;
 }) {
   return (
-    <div className={`border-brand-border rounded-[10px] border bg-white ${className}`}>
+    <div
+      className={`border-brand-border rounded-[10px] border bg-white ${
+        padded ? "px-4 py-3 sm:px-6 sm:py-5" : ""
+      } ${className}`}
+    >
       {children}
     </div>
   );
@@ -35,10 +49,10 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <header className="flex flex-wrap items-start justify-between gap-3">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-brand-dark text-xl font-semibold">{title}</h1>
-        {subtitle && <p className="text-brand-muted text-sm">{subtitle}</p>}
+    <header className="flex flex-wrap items-start justify-between gap-2 sm:gap-3">
+      <div className="flex flex-col gap-0.5 sm:gap-1">
+        <h1 className="text-brand-dark text-lg font-semibold sm:text-xl">{title}</h1>
+        {subtitle && <p className="text-brand-muted text-xs sm:text-sm">{subtitle}</p>}
       </div>
       {action}
     </header>
@@ -215,7 +229,7 @@ export function Badge({
 
 export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   return (
-    <div className="flex flex-col items-center gap-1 px-6 py-12 text-center">
+    <div className="flex flex-col items-center gap-1 px-4 py-8 text-center sm:px-6 sm:py-12">
       <p className="text-brand-dark text-sm font-medium">{title}</p>
       {hint && <p className="text-brand-muted text-sm">{hint}</p>}
     </div>
@@ -236,7 +250,9 @@ export function Banner({
     good: "bg-success-bg text-success-fg",
   }[tone];
   return (
-    <div className={`border-brand-border rounded-[10px] border px-4 py-3 text-sm ${cls}`}>
+    <div
+      className={`border-brand-border rounded-[10px] border px-3 py-2 text-sm sm:px-4 sm:py-3 ${cls}`}
+    >
       {children}
     </div>
   );

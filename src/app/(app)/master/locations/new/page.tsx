@@ -25,7 +25,7 @@ export default async function NewLocationPage() {
   ]);
 
   return (
-    <div className="flex max-w-3xl flex-col gap-6">
+    <div className="flex max-w-3xl flex-col gap-4 sm:gap-6">
       <PageHeader title={t("newLocation")} />
 
       {(!zones || zones.length === 0) && <Banner tone="warn">{t("noZone")}</Banner>}
