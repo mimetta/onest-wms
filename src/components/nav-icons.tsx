@@ -100,6 +100,52 @@ export function IconAdmin({ className }: IconProps) {
   );
 }
 
+/** Arrow curving from one shelf to another: putaway and internal moves. */
+export function IconTransfer({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <rect x="3" y="15" width="6" height="6" rx="1" />
+      <rect x="15" y="15" width="6" height="6" rx="1" />
+      <path d="M6 12V8a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v4" />
+      <path d="m15 9 3-3 3 3" />
+    </svg>
+  );
+}
+
+/** Arrow out of a box: stock leaving for a department. */
+export function IconIssue({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M12 14V4" />
+      <path d="m8 8 4-4 4 4" />
+      <path d="M3 14v4a3 3 0 0 0 3 3h12a3 3 0 0 0 3-3v-4" />
+    </svg>
+  );
+}
+
+/** A hand raised holding a slip: asking for stock. */
+export function IconRequisition({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M7 3h10a1 1 0 0 1 1 1v16l-3-2-3 2-3-2-3 2V4a1 1 0 0 1 1-1z" />
+      <path d="M9 8h6" />
+      <path d="M9 12h4" />
+    </svg>
+  );
+}
+
+/** A lorry: goods leaving the site. */
+export function IconDelivery({ className }: IconProps) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M3 7h10v9H3z" />
+      <path d="M13 10h4l4 3v3h-8z" />
+      <circle cx="7" cy="18" r="1.6" />
+      <circle cx="17" cy="18" r="1.6" />
+    </svg>
+  );
+}
+
 export function IconMore({ className }: IconProps) {
   return (
     <svg {...base} className={className}>
@@ -114,6 +160,10 @@ export const NAV_ICONS = {
   "/": IconDashboard,
   "/stock": IconStock,
   "/receive": IconReceive,
+  "/transfers": IconTransfer,
+  "/issues": IconIssue,
+  "/requisitions": IconRequisition,
+  "/delivery-notes": IconDelivery,
   "/qc": IconQc,
   "/documents": IconDocuments,
   "/labels": IconLabels,

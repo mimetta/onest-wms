@@ -28,7 +28,18 @@ export function MobileTabBar({ items }: { items: NavItem[] }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const PRIORITY = ["/", "/receive", "/stock", "/qc", "/documents"] as const;
+  // Ordered by what a handheld user actually does all day, not by the desktop
+  // nav's order. Home drops out of the four visible tabs because the wordmark
+  // already goes there and a dashboard is a desk screen.
+  const PRIORITY = [
+    "/receive",
+    "/transfers",
+    "/issues",
+    "/stock",
+    "/",
+    "/qc",
+    "/documents",
+  ] as const;
 
   const ranked = [...items].sort((a, b) => {
     const ai = PRIORITY.indexOf(a.href as (typeof PRIORITY)[number]);

@@ -565,6 +565,201 @@ begin
 end
 $$;
 
+-- =====================================================================
+-- Phase 2 demo documents
+--
+-- Enough for every Phase 2 screen to have something real on it, and — more
+-- usefully — one document parked at each interesting point in the lifecycle, so
+-- the approval chain can be seen rather than described:
+--
+--   RQ  approved   · waiting for the warehouse to fill it
+--   RQ  submitted  · waiting for the manager
+--   IS  posted     · filled, stock actually moved
+--   TR  posted     · a putaway, one hop (D-44)
+--
+-- Every one goes through submit_document / approve_document / post_document as
+-- the person who would really do it. Inserting them with status = 'posted' would
+-- be faster and would prove nothing — the same mistake D-38 was about, and now
+-- impossible anyway, because a document can only be INSERTed as a draft (D-47).
+-- =====================================================================
+
+do $$
+declare
+  v_wh       uuid := (select id from warehouses where is_default);
+  v_manager  uuid := (select up.id from user_profiles up
+                      join auth.users au on au.id = up.id
+                      where au.email = 'manager@onest.co.th');
+  v_staff    uuid := (select up.id from user_profiles up
+                      join auth.users au on au.id = up.id
+                      where au.email = 'staff1@onest.co.th');
+  v_prod_dept uuid := (select id from departments where code = 'PROD');
+  v_other_dept uuid := (select id from departments where code = 'RETAIL');
+  v_rq       uuid;
+  v_rq2      uuid;
+  v_is       uuid;
+  v_tr       uuid;
+  v_recv     uuid;
+  v_store    uuid;
+  r          record;
+  v_line     integer;
+begin
+  -- Departments are seeded by code, but a rename would leave this silently
+  -- doing nothing, so fail loudly instead.
+  if v_prod_dept is null or v_other_dept is null then
+    raise exception 'seed: expected departments PROD and RETAIL';
+  end if;
+
+  -- ---------------------------------------------------------------- RQ 1
+  -- Raised by staff, approved by the manager, waiting to be filled.
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_staff, 'role', 'authenticated')::text, true);
+
+  insert into requisitions (warehouse_id, department_id, created_by, notes)
+  values (v_wh, v_prod_dept, v_staff, 'เบิกใช้สายการผลิต A')
+  returning id into v_rq;
+
+  v_line := 0;
+  for r in
+    select p.id, p.base_uom_id
+    from products p
+    where p.tracking_mode = 'none' and p.is_active
+    order by p.sku
+    limit 3
+  loop
+    v_line := v_line + 1;
+    insert into requisition_lines (header_id, line_no, product_id, qty, uom_id)
+    values (v_rq, v_line, r.id, 10, r.base_uom_id);
+  end loop;
+
+  perform submit_document('requisition', v_rq);
+
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_manager, 'role', 'authenticated')::text, true);
+  perform approve_document('requisition', v_rq);
+
+  -- ---------------------------------------------------------------- RQ 2
+  -- Submitted and NOT approved, so the manager's approval queue is not empty
+  -- on a fresh demo.
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_staff, 'role', 'authenticated')::text, true);
+
+  insert into requisitions (warehouse_id, department_id, created_by, notes)
+  values (v_wh, v_other_dept, v_staff, 'สินค้าเติมหน้าร้าน')
+  returning id into v_rq2;
+
+  insert into requisition_lines (header_id, line_no, product_id, qty, uom_id)
+  select v_rq2, 1, p.id, 4, p.base_uom_id
+  from products p
+  where p.tracking_mode = 'none' and p.is_active
+  order by p.sku desc
+  limit 1;
+
+  perform submit_document('requisition', v_rq2);
+
+  -- ---------------------------------------------------------------- TR
+  -- A re-slot: storage to storage, one hop, no in_transit (D-44).
+  --
+  -- Not the QC-cleared putaway, deliberately. That is the more illustrative
+  -- flow, but seeding it would mean passing a lot out of QC hold — and the QC
+  -- review queue is supposed to have work waiting in it on a fresh demo. A
+  -- re-slot (consolidating part of one bin into an empty one) is an equally
+  -- real operation and does not have to disturb anything else to exist.
+  select id into v_recv
+  from stock_on_hand soh
+  join locations l on l.id = soh.location_id
+  where l.type = 'storage' and soh.qty > 0
+  order by l.code
+  limit 1;
+
+  select id into v_store
+  from locations l
+  where l.type = 'storage'
+    and l.id <> v_recv
+    and not exists (select 1 from stock_on_hand s where s.location_id = l.id)
+  order by l.code
+  limit 1;
+
+  if v_recv is not null and v_store is not null then
+    insert into transfers (warehouse_id, from_warehouse_id, to_warehouse_id,
+                           created_by, notes)
+    values (v_wh, v_wh, v_wh, v_staff, 'จัดเรียงชั้นวางใหม่')
+    returning id into v_tr;
+
+    v_line := 0;
+    for r in
+      select soh.product_id, soh.lot_id, soh.serial_id, soh.qty, p.base_uom_id
+      from stock_on_hand soh
+      join products p on p.id = soh.product_id
+      where soh.location_id = v_recv and soh.qty > 0
+      limit 1
+    loop
+      v_line := v_line + 1;
+      insert into transfer_lines (header_id, line_no, product_id, lot_id, serial_id,
+                                  qty, uom_id, from_location_id, to_location_id)
+      -- Half the holding, so the source bin does not empty and the movement
+      -- path shows a genuine partial move.
+      values (v_tr, v_line, r.product_id, r.lot_id, r.serial_id,
+              round(r.qty / 2, 4), r.base_uom_id, v_recv, v_store);
+    end loop;
+
+    -- Staff do not hold transfer.approve, so the manager approves and staff
+    -- posts — the configured chain, walked as the two real people.
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', v_manager, 'role', 'authenticated')::text, true);
+    perform approve_document('transfer', v_tr);
+
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', v_staff, 'role', 'authenticated')::text, true);
+    perform post_document('transfer', v_tr);
+  else
+    raise notice 'seed: no suitable bins for a re-slot, transfer skipped';
+  end if;
+
+  -- ---------------------------------------------------------------- IS
+  -- Fills RQ 1, but only from stock that is genuinely pickable — so the
+  -- quantities come from suggest_picks() rather than being assumed, exactly as
+  -- the screen does it.
+  perform set_config('request.jwt.claims',
+    json_build_object('sub', v_staff, 'role', 'authenticated')::text, true);
+
+  insert into issues (warehouse_id, department_id, requisition_id, created_by, notes)
+  values (v_wh, v_prod_dept, v_rq, v_staff, 'จ่ายตามใบขอเบิก')
+  returning id into v_is;
+
+  v_line := 0;
+  for r in
+    select rl.product_id, p.base_uom_id, sp.location_id, sp.lot_id, sp.serial_id,
+           sp.qty_suggested
+    from requisition_lines rl
+    join products p on p.id = rl.product_id
+    cross join lateral suggest_picks(rl.product_id, rl.qty_base, v_wh, null) sp
+    where rl.header_id = v_rq
+  loop
+    v_line := v_line + 1;
+    insert into issue_lines (header_id, line_no, product_id, lot_id, serial_id,
+                             qty, uom_id, from_location_id)
+    values (v_is, v_line, r.product_id, r.lot_id, r.serial_id,
+            r.qty_suggested, r.base_uom_id, r.location_id);
+  end loop;
+
+  if v_line = 0 then
+    -- Nothing pickable: leave the issue as a draft rather than fabricating a
+    -- line that would fail the sufficiency guard at posting.
+    raise notice 'seed: no pickable stock, issue % left as draft', v_is;
+  else
+    perform submit_document('issue', v_is);
+
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', v_manager, 'role', 'authenticated')::text, true);
+    perform approve_document('issue', v_is);
+
+    perform set_config('request.jwt.claims',
+      json_build_object('sub', v_staff, 'role', 'authenticated')::text, true);
+    perform post_document('issue', v_is);
+  end if;
+end
+$$;
+
 select set_config('request.jwt.claims', null, false);
 
 -- =====================================================================

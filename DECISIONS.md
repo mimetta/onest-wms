@@ -1443,3 +1443,121 @@ different sentences on the screen, so the function must not collapse them.
 timestamps explicitly. In production each receipt is its own transaction, so this is a test
 artefact rather than a design flaw — but it is why the FIFO tests set `created_at` by hand,
 and why a reader should not "simplify" them.
+
+---
+
+## D-51 — One workflow module, shared by every document type
+
+*Phase 2, 18 Aug 2026.*
+
+`submit` / `approve` / `cancel` / `post` live once, in `app/(app)/documents/actions.ts`,
+parameterised by document type. Phase 1 wrote them inline in the receiving and QC screens,
+which was fine for two callers and would not be for seven.
+
+**Reasoning.** The *order* of operations is load-bearing and easy to get subtly wrong per
+screen: approve then post, both through RPCs, never a direct status UPDATE, because RLS only
+permits editing a document while it is `draft` (D-38). Written once, a new document type
+inherits the correct lifecycle and cannot accidentally acquire a different one.
+
+`DOC_CONFIG` in `lib/documents/config.ts` carries the per-type facts the screens need — table,
+line table, prefix, whether it posts at all, which route owns it. `posts: false` on
+requisition is what makes `WorkflowBar` never render a Post button for one (D-45), rather than
+each screen remembering.
+
+**Consequences.** `approveAndPost()` exists for documents whose approver and poster are the
+same person by design, and is deliberately NOT used for issues, where the separation of duties
+is the point.
+
+---
+
+## D-52 — Screens adapt to the signed-in role rather than assuming one
+
+*Phase 2, 18 Aug 2026.*
+
+The permission matrix is not uniform across Phase 2, and the screens follow it rather than
+papering over it:
+
+| Document | Who approves | So the finish button is |
+|---|---|---|
+| ใบเบิก · issue | manager only | staff submit, manager approves |
+| ใบโอนย้าย · transfer | manager only | manager: post now · staff: submit |
+| ใบส่งสินค้า · delivery note | warehouse_staff too | post and print, in one action |
+
+`canApprove` is computed on the SERVER and passed into the client component, so a user's
+permission set is never shipped to the browser to be filtered there.
+
+**Reasoning.** This is D-39 (the QC write-off) generalised. There were two easy wrong answers:
+show everyone an Approve button and let the RPC reject it, which trains people to expect
+failure; or quietly grant staff the missing permission, which removes a control the owner set
+deliberately. Adapting the screen keeps both the control and the operator's trust in it.
+
+**Flagged, not decided:** a putaway needs a manager's approval, because `warehouse_staff` does
+not hold `transfer.approve`. That is the configured chain and this build honours it — but it
+means the twenty-second walk D-44 was about still waits on a second person. Worth revisiting
+before go-live; the fix, if wanted, is one row in `role_permissions`, not a migration.
+
+---
+
+## D-53 — The delivery note's signature blocks are blank by design
+
+*Phase 2, 18 Aug 2026.*
+
+The printed ใบส่งสินค้า carries two hand-signature blocks — ผู้ส่งสินค้า and ผู้รับสินค้า — each a
+ruled signing line plus blank ชื่อ and วันที่ rules, sized at 7mm clear height for a pen.
+
+**Reasoning.** Same as the drum label's QC box (D-37), and for the same reason: the sheet
+exists to capture something the system does **not** know — that a named human at the customer's
+gate accepted these goods. Printing a name the system happens to hold would create a second
+source of truth and would make the paper look complete when nothing has been confirmed.
+
+The sheet prints on plain A4 from any office printer, and carries **no pricing** — it is
+handled by warehouse staff and a customer's storeman, and cost is admin/manager information.
+
+A consignment despatch prints a ฝากขาย · CONSIGNMENT mark, because the person signing is being
+asked to hold goods, not buy them.
+
+---
+
+## D-54 — The document centre is assembled in the application, not in a view
+
+*Phase 2, 18 Aug 2026.*
+
+`/documents` issues eight small queries, one per document type, and merges them by
+`created_at` in TypeScript.
+
+**Reasoning.** A `UNION` view would have to be maintained in lockstep with every new document
+type and would fix the column set at the lowest common denominator. Eight separate queries
+also get per-type RLS for free — each table's own policies apply, which a union view would
+flatten. At <500 SKUs and one warehouse this is not a performance problem worth a view.
+
+Sorted by creation rather than document number, because a draft has no number yet and a
+requisition only gets one at approval (D-45). Filters are links rather than client state:
+shareable, back-button-correct, and they work with no JavaScript.
+
+**Consequences.** A per-type query failure is surfaced in a banner rather than quietly
+shortening the list — a missing table is a bug, not a user's problem.
+
+---
+
+## D-55 — PostgREST cannot embed relations on a view, and now there is a test for it
+
+*Found again in Phase 2, 18 Aug 2026.*
+
+`stock_on_hand` is a VIEW, so PostgREST has no foreign-key metadata for it and
+`.select("qty, products(sku)")` **errors** rather than returning data. This bit Phase 1's stock
+explorer, where it rendered as "no stock". It was about to ship again in the transfer screen's
+`readBin()`, which is the query behind the whole putaway flow.
+
+Two things changed:
+
+1. `readBin()` selects the plain view columns and resolves names with a second round of
+   lookups, the same shape as `loadOnHand()`.
+2. `npm run verify:queries` exercises every PostgREST query the Phase 2 screens issue, as a
+   real signed-in user, against the local database — 28 checks. It includes a query that
+   asserts the view embed **is** rejected, so if a future PostgREST learns to infer view
+   relationships the workaround is flagged as stale rather than left as folklore.
+
+**Reasoning.** Neither typecheck nor `next build` can see an invalid embed: it is a runtime
+error in a string. That is a defect class this project has now hit twice, in the same way, a
+month apart — so it gets a test rather than a third discovery. The same script also asserts
+D-46 holds for a real staff user over the API, which no amount of reading the policy proves.

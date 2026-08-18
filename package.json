@@ -15,7 +15,8 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
-    "db:diff": "supabase db diff"
+    "db:diff": "supabase db diff",
+    "verify:queries": "node scripts/verify-queries.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
