@@ -84,11 +84,14 @@ export default async function Page({ params }: PageProps<"/adjustments/[id]">) {
   const approver = header.approver as unknown as { full_name: string } | null;
   const poster = header.poster as unknown as { full_name: string } | null;
 
-  // A disposal of stock that never passed QC needs lot.dispose_unpassed, which
-  // only the qc role holds (D-14). Saying so up front is kinder than letting a
-  // manager press Post and read a permission error.
-  const unpassedDisposal =
-    Boolean(reason?.is_disposal) &&
+  // Any DECREASE of a lot that has not passed QC needs lot.dispose_unpassed,
+  // which only the qc role holds — not just reasons flagged is_disposal (D-62).
+  // The gate is derived from the movement's endpoints, so a "Sample for testing"
+  // decrease is caught exactly like a scrapping. Keying this warning on
+  // is_disposal, as it originally did, meant the one case a manager would not
+  // expect to be blocked was also the one case they got no warning about.
+  const unpassedDecrease =
+    reason?.direction === "decrease" &&
     rows.some((l) => l.lots && l.lots.qc_status !== "passed");
 
   return (
@@ -111,7 +114,7 @@ export default async function Page({ params }: PageProps<"/adjustments/[id]">) {
         />
       </Card>
 
-      {unpassedDisposal && <Banner tone="warn">{t("unpassedDisposalWarning")}</Banner>}
+      {unpassedDecrease && <Banner tone="warn">{t("unpassedDisposalWarning")}</Banner>}
 
       <Card className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">

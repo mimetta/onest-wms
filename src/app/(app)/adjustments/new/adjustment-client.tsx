@@ -71,7 +71,13 @@ export function AdjustmentClient({
   const router = useRouter();
   const [, startTransition] = useTransition();
 
-  const [reasonId, setReasonId] = useState(reasons[0]?.id ?? "");
+  // Default to the first code that can actually be used. Ordering is by code, so
+  // before the directed split this defaulted to COUNT_VAR — alphabetically first
+  // and the one code the screen refuses, meaning anyone opening the screen cold
+  // met a red banner before doing anything.
+  const [reasonId, setReasonId] = useState(
+    (reasons.find((r) => r.direction !== "both") ?? reasons[0])?.id ?? "",
+  );
   const [draftId, setDraftId] = useState<string | null>(null);
   const [lines, setLines] = useState<AdjustmentLine[]>([]);
   const [notes, setNotesValue] = useState("");
@@ -288,7 +294,10 @@ export function AdjustmentClient({
           <Banner tone="bad">{t("reasonNeedsDirection")}</Banner>
         )}
 
-        {reason?.isDisposal && <Banner tone="warn">{t("disposalNeedsQc")}</Banner>}
+        {/* Shown for every decrease, not only for reasons flagged as disposals:
+            the QC gate is derived from the movement's endpoints, so removing a
+            non-passed lot needs the QC role whatever the reason says (D-62). */}
+        {direction === "decrease" && <Banner tone="warn">{t("decreaseNeedsQc")}</Banner>}
       </Card>
 
       {direction !== "both" && (

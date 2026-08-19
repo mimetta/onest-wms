@@ -718,6 +718,7 @@
     "errorSave": "Could not save",
     "errorLoad": "Could not load",
     "emptyTitle": "No adjustments yet",
-    "emptyHint": "Raise one to correct a balance."
+    "emptyHint": "Raise one to correct a balance.",
+    "decreaseNeedsQc": "This reason removes stock. If any lot has not passed QC, only the QC role can post it — a manager cannot."
   }
 }

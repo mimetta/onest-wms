@@ -280,18 +280,12 @@ from products p cross join warehouses w;
 -- Adjustment reasons
 -- =====================================================================
 
-insert into adjustment_reasons (code, name_th, name_en, direction, is_disposal) values
-  ('DAMAGE',    'สินค้าเสียหาย',        'Damaged goods',        'decrease', true),
-  ('SPILL',     'หกหล่น/รั่วไหล',       'Spillage',             'decrease', true),
-  ('EVAP',      'ระเหย/สูญเสียตามธรรมชาติ','Evaporation loss',   'decrease', true),
-  ('EXPIRED',   'หมดอายุ - ตัดจำหน่าย',  'Expired write-off',    'decrease', true),
-  ('SCRAP',     'ทำลายทิ้ง',            'Scrapped',             'decrease', true),
-  ('RETURN_SUP','คืนผู้ขาย',            'Return to supplier',   'decrease', true),
-  ('COUNT_VAR', 'ผลต่างจากการตรวจนับ',   'Cycle count variance', 'both',     false),
-  ('SAMPLE',    'เบิกตัวอย่างทดสอบ',     'Sample for testing',   'decrease', false),
-  ('FOUND',     'พบสินค้าเพิ่ม',         'Found stock',          'increase', false),
-  ('SYS_CORR',  'ปรับปรุงตามระบบ',       'System correction',    'both',     false),
-  ('OPENING',   'ยอดยกมา ณ วันเริ่มระบบ', 'Opening balance',      'increase', false);
+-- Adjustment reason codes are NOT seeded: migration 0024 owns them.
+--
+-- They used to live here, which meant a fresh production project — migrations
+-- applied, no seed, per GO-LIVE.md D1 — would have had none at all, and an
+-- adjustment screen that could not be used. They are confirmed business master
+-- data, so they are schema.
 
 -- =====================================================================
 -- Users

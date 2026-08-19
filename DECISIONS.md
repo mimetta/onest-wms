@@ -1741,3 +1741,60 @@ by the screen.
 
 **Serial-tracked found stock is refused outright.** Inventing a serial here would create a unit
 with no arrival history, which cannot be traced — the honest answer is a goods receipt.
+
+---
+
+## D-62 — The QC gate follows the movement's endpoints, not the reason code's flag
+
+*Found 19 Aug 2026, while splitting the bidirectional reason codes.*
+
+`adjustment_reasons.is_disposal` carried a comment claiming it was "what the disposal class in
+post_document() keys off, so the QC exemption follows WHY stock is leaving". That was false.
+`classify_movement()` derives the class from the movement's **endpoints** — stock leaving with no
+destination is a disposal, whatever the reason code says.
+
+Proven by test: an adjustment with `is_disposal = false` (SAMPLE, "เบิกตัวอย่างทดสอบ") that
+decreases a `pending_qc` lot is refused with *"lot.dispose_unpassed is required"*.
+
+**The behaviour is correct and unchanged.** Deriving the class from where stock actually went is
+far more robust than trusting a boolean somebody can clear on a master-data screen. A reason code
+flagged `is_disposal = false` must never become a quiet route for removing unpassed stock, and
+under the current design it cannot be.
+
+**What was wrong was everything built on top of the false comment.** The adjustment detail screen
+warned "this needs the QC role" only when `is_disposal` was true — so the one case a manager would
+*not* expect to be blocked, a routine sample draw, was also the one case they got no warning
+about. They would have pressed Post and read a permission error, which is exactly what the banner
+existed to prevent. Both the detail page and the builder now warn on **any decrease**.
+
+**Consequences.** `is_disposal` is now documented as advisory — badges and reporting only. Three
+tests pin the real rule: a non-disposal decrease of an unpassed lot is refused, the same decrease
+passes once QC clears the lot, and an *increase* of an unpassed lot posts freely, because finding
+a drum must not require the QC role or nobody will record finding drums.
+
+---
+
+## D-63 — Adjustment reason codes are schema, not seed
+
+*Found 19 Aug 2026, in the same change.*
+
+The eleven reason codes lived only in `supabase/seed.sql`. `GO-LIVE.md` D1 requires a **fresh
+Supabase project with migrations applied and no seed** — so production would have started with
+zero reason codes and an adjustment screen that could not be used at all. Migration 0024 now owns
+them and the seed's copy is gone.
+
+**Reasoning.** The line between seed and schema is not "is it data?" but "would production be
+wrong without it?". The 50 demo SKUs are seed: production replaces them. Reason codes are
+different — the owner has confirmed this specific list as correct for the business, they are
+referenced by every adjustment ever raised, and their absence is not an empty screen but a broken
+one. That makes them operational master data.
+
+**The near-miss is the point.** This would have surfaced on go-live day, on the one screen that
+exists so day-one mistakes can be corrected, at the moment there was no way to correct anything.
+It was found only because splitting `COUNT_VAR` forced a look at where the codes came from.
+
+**Consequences.** The two superseded codes are deactivated rather than deleted — an adjustment
+references its reason, and deleting master data a document points at makes history stop meaning
+what it meant. A test asserts the codes exist after migrations alone, that no *active* code lacks
+a direction, and that superseded codes are inactive rather than absent. Other seeded master data
+worth the same question before go-live: UOMs, departments, and location types.
