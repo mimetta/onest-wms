@@ -89,9 +89,9 @@ export const DOC_CONFIG: Record<DocType, DocConfig> = {
   adjustment: {
     table: "adjustments",
     lineTable: "adjustment_lines",
-    prefix: "AD",
+    prefix: "AJ",
     posts: true,
-    route: null,
+    route: "/adjustments",
   },
   cycle_count: {
     table: "cycle_counts",

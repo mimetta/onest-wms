@@ -30,6 +30,7 @@ export async function Nav({ user }: { user: SessionUser }) {
     { href: "/issues", label: t("issues"), perm: "issue.create" },
     { href: "/requisitions", label: t("requisitions"), perm: "requisition.create" },
     { href: "/delivery-notes", label: t("deliveryNotes"), perm: "delivery_note.create" },
+    { href: "/adjustments", label: t("adjustments"), perm: "adjustment.create" },
     { href: "/qc", label: t("qc"), perm: "lot.set_qc_status" },
     { href: "/documents", label: t("documents"), perm: "report.read" },
     { href: "/labels", label: t("labels"), perm: "label.print" },

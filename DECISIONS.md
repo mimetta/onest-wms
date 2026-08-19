@@ -1675,3 +1675,69 @@ display and before submit.
 the thing that decides whether people use it properly or keep a parallel notebook. Rounded in
 both places on purpose — the database value is the one that matters, and the displayed value is
 the one that gets believed.
+
+---
+
+## D-60 — Which document types post is data, not a list inside a function
+
+*Found while writing a test to pin the application's document table to the database, 19 Aug 2026.*
+
+D-45 stopped requisitions being posted with an `if p_doc_type = 'requisition'` check inside
+`post_document()`. Cycle counts have exactly the same property — counting is measurement, and
+accepting a variance generates an adjustment, which is the document that moves stock — but
+nobody wrote the second branch. So an approved cycle count posted happily: it allocated
+`CC-2026-00001`, marked itself `posted`, and moved nothing.
+
+`document_prefixes` now carries a `posts` boolean, and `post_document()` reads it.
+
+**Reasoning.** Three places knew something about this and none of them was the source of truth:
+the table knew prefixes, the function knew which types post, and the application's `DOC_CONFIG`
+restated both. That is how the adjustment prefix came to be written `AD` in the application
+while the database issues `AJ` — wrong, and invisible, because nothing load-bearing read it yet.
+
+**Harmless today, not in three weeks.** No screen raises a cycle count yet. One will, and a
+counter's sheet would then have silently become a document claiming to be the record of a stock
+change that never happened.
+
+**Consequences.** `tests/document-config.test.ts` now pins `DOC_CONFIG` against the database on
+four axes — prefixes, table and line-table existence, enum coverage, and `posts` — so adding a
+document type in SQL without a config entry fails a test instead of rendering a blank row in the
+document centre. A new non-posting type needs one column value, not a new branch.
+
+---
+
+## D-61 — The adjustment screen never asks for a direction or a sign
+
+*Phase 3.1, 19 Aug 2026.*
+
+ใบปรับปรุงสต๊อก is the system's only correction mechanism, and the ledger being append-only
+(D-03) means a correction is a new movement rather than an edit. The screen's design follows
+from one decision: the **reason code carries the direction**, and the operator never sees a sign.
+
+- `increase` → the quantity hangs off `to_location` (stock appears in the bin)
+- `decrease` → the quantity hangs off `from_location` (stock leaves it)
+- `both` → refused for a line, because a reason code that has not decided cannot be applied;
+  the fix is master data, not a runtime prompt
+
+**Reasoning.** This is D-02's shape earning its keep. Quantity is always positive and the meaning
+lives in the endpoints, so there is no sign anywhere for a person to get backwards — and a sign
+an operator *can* get backwards is one that will be got backwards, at the end of a shift, on the
+stock that mattered.
+
+**The operator reports the world, not the delta.** On a decrease they type what they actually
+counted; the screen computes the difference. Asking a person on a handheld to subtract is asking
+for a second error on top of the first.
+
+**Two flows, because the two cases genuinely differ.** A decrease scans the bin and picks from
+what is there. An increase cannot, because the whole premise is that the bin listing is wrong —
+so it names the product instead. Found lot-tracked stock creates its lot if unknown, left at
+`pending_qc`, because stock nobody knew about has by definition not been inspected.
+
+**Never self-approved.** The builder only ever submits, even for a user holding
+`adjustment.approve`. A write-off approved by the person who raised it is not a control (D-20,
+D-39). The disposal warning is surfaced on the document too, since a disposal of unpassed stock
+needs the QC role and a manager reading "permission denied" after pressing Post has been failed
+by the screen.
+
+**Serial-tracked found stock is refused outright.** Inventing a serial here would create a unit
+with no arrival history, which cannot be traced — the honest answer is a goods receipt.
