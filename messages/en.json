@@ -528,7 +528,11 @@
     "errorSave": "Could not save",
     "errorLoad": "Could not load",
     "emptyTitle": "No issue slips yet",
-    "emptyHint": "Raise one to fill an approved requisition."
+    "emptyHint": "Raise one to fill an approved requisition.",
+    "noneOfThisProductHere": "{code} holds none of this product",
+    "chooseLot": "Choose which lot you took",
+    "whichLot": "Which lot did you take?",
+    "lotAdopted": "Recording lot {lot}, the only one in that bin"
   },
   "transfers": {
     "title": "Transfer",

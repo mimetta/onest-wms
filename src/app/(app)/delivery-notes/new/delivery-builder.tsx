@@ -102,11 +102,14 @@ export function DeliveryBuilder({
   useEffect(() => {
     // Guarded rather than cleared: `readyToSuggest` gates the render below, so
     // there is no stale list to wipe when the operator empties the quantity.
-    if (!readyToSuggest) return;
+    // The draft id is part of the query now — suggestions subtract this
+    // document's own un-posted lines — so there is nothing to ask for until it
+    // exists.
+    if (!readyToSuggest || !draftId) return;
 
     let cancelled = false;
     void (async () => {
-      const result = await getSuggestions(productId, wantedQty);
+      const result = await getSuggestions(productId, wantedQty, draftId!);
       if (cancelled) return;
       if (result.ok) {
         setSuggestions(result.data ?? []);
@@ -116,7 +119,7 @@ export function DeliveryBuilder({
     return () => {
       cancelled = true;
     };
-  }, [productId, wantedQty, readyToSuggest]);
+  }, [productId, wantedQty, readyToSuggest, draftId]);
 
   const handleAdd = async () => {
     if (!draftId || !product || !chosen) return;
@@ -136,7 +139,7 @@ export function DeliveryBuilder({
       locationId: chosen.locationId,
       lotId: chosen.lotId,
       serialId: chosen.serialId,
-      qty: Math.min(amount, chosen.qtySuggested),
+      qty: Math.round(Math.min(amount, chosen.qtySuggested) * 1e4) / 1e4,
       uomId: product.baseUomId,
     });
     setBusy(false);

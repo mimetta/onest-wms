@@ -421,3 +421,216 @@ describe("suggest_picks · as a real user", () => {
     });
   });
 });
+
+describe("suggest_picks · what the document has already claimed", () => {
+  /**
+   * The defect this encodes was found on the deployed site, not by these tests
+   * — because every test above asks for suggestions against a clean ledger,
+   * which is exactly the state a half-built pick list is NOT in.
+   */
+  it("does not offer a bin the same document has already drained", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      const p = await undatedProduct(db, w);
+      const lot = await makeLot(db, p, `L-ONE-${w.tag}`, "passed", w.users.qc);
+
+      await giveStock(db, w, {
+        productId: p,
+        locationId: w.locations.storage,
+        qty: 100,
+        lotId: lot,
+        uomId: w.uoms.kg,
+        actor: w.users.staff,
+      });
+
+      // A draft issue that has already claimed the whole 100.
+      await db.setupAs(w.users.manager);
+      const iss = await db.value(
+        `insert into issues (warehouse_id, department_id, created_by)
+         values ($1, $2, $3) returning id`,
+        [w.wh, w.dept, w.users.manager],
+      );
+      await db.query(
+        `insert into issue_lines
+           (header_id, line_no, product_id, lot_id, qty, uom_id, from_location_id)
+         values ($1, 1, $2, $3, 100, $4, $5)`,
+        [iss, p, lot, w.uoms.kg, w.locations.storage],
+      );
+
+      // Blind to the document — the old behaviour — still sees 100 on the shelf.
+      const blind = await db.query(
+        `select location_code from suggest_picks($1, 40, $2, null, null, null)`,
+        [p, w.wh],
+      );
+      expect(blind).toHaveLength(1);
+
+      // Aware of it, there is nothing left to offer, so the picker is told the
+      // truth instead of being sent to an empty shelf.
+      const aware = await db.query(
+        `select location_code from suggest_picks($1, 40, $2, null, 'issue', $3)`,
+        [p, w.wh, iss],
+      );
+      expect(aware).toHaveLength(0);
+    });
+  });
+
+  it("offers only the remainder when the document claimed part of a bin", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      const p = await undatedProduct(db, w);
+      const lot = await makeLot(db, p, `L-PART-${w.tag}`, "passed", w.users.qc);
+
+      await giveStock(db, w, {
+        productId: p,
+        locationId: w.locations.storage,
+        qty: 100,
+        lotId: lot,
+        uomId: w.uoms.kg,
+        actor: w.users.staff,
+      });
+
+      await db.setupAs(w.users.manager);
+      const iss = await db.value(
+        `insert into issues (warehouse_id, department_id, created_by)
+         values ($1, $2, $3) returning id`,
+        [w.wh, w.dept, w.users.manager],
+      );
+      await db.query(
+        `insert into issue_lines
+           (header_id, line_no, product_id, lot_id, qty, uom_id, from_location_id)
+         values ($1, 1, $2, $3, 70, $4, $5)`,
+        [iss, p, lot, w.uoms.kg, w.locations.storage],
+      );
+
+      const rows = (await db.query(
+        `select qty_suggested, qty_at_bin from suggest_picks($1, 50, $2, null, 'issue', $3)`,
+        [p, w.wh, iss],
+      )) as unknown as { qty_suggested: string; qty_at_bin: string }[];
+
+      // 30 left, and the request for 50 is short rather than empty — the two
+      // mean different things on the floor (D-50).
+      expect(Number(rows[0].qty_at_bin)).toBe(30);
+      expect(Number(rows[0].qty_suggested)).toBe(30);
+      expect(rows).toHaveLength(1);
+    });
+  });
+
+  it("subtracts an untracked product's claim, where the lot is null on both sides", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      const p = w.products.untracked;
+
+      await giveStock(db, w, {
+        productId: p,
+        locationId: w.locations.storage,
+        qty: 60,
+        uomId: w.uoms.pcs,
+        actor: w.users.staff,
+      });
+
+      await db.setupAs(w.users.manager);
+      const iss = await db.value(
+        `insert into issues (warehouse_id, department_id, created_by)
+         values ($1, $2, $3) returning id`,
+        [w.wh, w.dept, w.users.manager],
+      );
+      await db.query(
+        `insert into issue_lines
+           (header_id, line_no, product_id, qty, uom_id, from_location_id)
+         values ($1, 1, $2, 60, $3, $4)`,
+        [iss, p, w.uoms.pcs, w.locations.storage],
+      );
+
+      // `null = null` is null, not true — so a plain equi-join on lot_id would
+      // silently fail to match here and the whole fix would be inert for
+      // exactly the products that have no lot to fall back on.
+      const rows = await db.query(
+        `select location_code from suggest_picks($1, 10, $2, null, 'issue', $3)`,
+        [p, w.wh, iss],
+      );
+      expect(rows).toHaveLength(0);
+    });
+  });
+
+  it("ignores claims made by a DIFFERENT document", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      const p = w.products.untracked;
+
+      await giveStock(db, w, {
+        productId: p,
+        locationId: w.locations.storage,
+        qty: 60,
+        uomId: w.uoms.pcs,
+        actor: w.users.staff,
+      });
+
+      await db.setupAs(w.users.manager);
+      const other = await db.value(
+        `insert into issues (warehouse_id, department_id, created_by)
+         values ($1, $2, $3) returning id`,
+        [w.wh, w.dept, w.users.manager],
+      );
+      await db.query(
+        `insert into issue_lines
+           (header_id, line_no, product_id, qty, uom_id, from_location_id)
+         values ($1, 1, $2, 60, $3, $4)`,
+        [other, p, w.uoms.pcs, w.locations.storage],
+      );
+
+      const mine = await db.value(
+        `insert into issues (warehouse_id, department_id, created_by)
+         values ($1, $2, $3) returning id`,
+        [w.wh, w.dept, w.users.manager],
+      );
+
+      // Scoped to the document in front of the operator, deliberately. Treating
+      // every open document as a reservation is a bigger design decision —
+      // it would hide real stock from a second picker and needs a release
+      // policy for abandoned drafts — so it is NOT done here, and two pickers
+      // racing the same bin are still caught by the sufficiency guard at
+      // posting (D-13).
+      const rows = await db.query(
+        `select location_code from suggest_picks($1, 10, $2, null, 'issue', $3)`,
+        [p, w.wh, mine],
+      );
+      expect(rows).toHaveLength(1);
+    });
+  });
+
+  it("rounds to the ledger's scale rather than exposing float noise", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      const p = w.products.untracked;
+
+      await giveStock(db, w, {
+        productId: p,
+        locationId: w.locations.storage,
+        qty: 500,
+        uomId: w.uoms.pcs,
+        actor: w.users.staff,
+      });
+
+      await db.setupAs(w.users.manager);
+      const iss = await db.value(
+        `insert into issues (warehouse_id, department_id, created_by)
+         values ($1, $2, $3) returning id`,
+        [w.wh, w.dept, w.users.manager],
+      );
+      await db.query(
+        `insert into issue_lines
+           (header_id, line_no, product_id, qty, uom_id, from_location_id)
+         values ($1, 1, $2, 416.48, $3, $4)`,
+        [iss, p, w.uoms.pcs, w.locations.storage],
+      );
+
+      const rows = (await db.query(
+        `select qty_suggested from suggest_picks($1, 83.52, $2, null, 'issue', $3)`,
+        [p, w.wh, iss],
+      )) as unknown as { qty_suggested: string }[];
+
+      // The value a picker reads, not 83.51999999999998.
+      expect(Number(rows[0].qty_suggested)).toBe(83.52);
+    });
+  });
+});

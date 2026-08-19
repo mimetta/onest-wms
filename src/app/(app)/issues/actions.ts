@@ -111,6 +111,8 @@ export async function ensureDraft(
 export async function getSuggestions(
   productId: string,
   qty: number,
+  /** The draft being built, so its own un-posted lines are not offered again. */
+  issueId: string,
 ): Promise<ActionResult<Suggestion[]>> {
   const user = await requirePerm("issue.create");
   const supabase = await createClient();
@@ -120,6 +122,8 @@ export async function getSuggestions(
     p_qty: qty,
     p_warehouse_id: user.warehouseId,
     p_lot_id: null,
+    p_exclude_doc_type: "issue",
+    p_exclude_doc_id: issueId,
   });
 
   if (error) return { ok: false, error: "errorLoad", detail: error.message };
@@ -152,30 +156,110 @@ export async function getSuggestions(
   };
 }
 
+/** A lot physically present in the scanned bin, for the override case. */
+export type BinLot = {
+  lotId: string | null;
+  lotNo: string | null;
+  qty: number;
+  expiryDate: string | null;
+};
+
 /**
- * Check a scanned bin against the pick the operator was asked to make.
+ * Check a scanned bin against the pick the operator was asked to make, and
+ * report what is actually in it.
  *
  * Returns whether it matches rather than refusing outright. Overriding a
  * suggestion is legitimate — the suggested drum may be behind a pallet, or
  * damaged — and the honest design is to let the operator record what they
  * actually took and flag the divergence, not to insist on a fiction. The QC and
  * sufficiency guards still apply at posting either way (D-13, D-14).
+ *
+ * The bin's contents come back with it so the caller can re-derive the lot
+ * rather than discarding it, which is what made an overridden line unpostable.
  */
 export async function verifyBinScan(
   raw: string,
   expectedLocationId: string,
+  productId: string,
 ): Promise<
   ActionResult<{
     locationId: string;
     code: string;
     matches: boolean;
     blocksConsumption: boolean;
+    /** What this product actually has in the scanned bin. */
+    lots: BinLot[];
+    trackingMode: "none" | "lot" | "serial";
   }>
 > {
-  await requirePerm("issue.create");
+  const user = await requirePerm("issue.create");
 
   const resolved = await resolveBarcode(raw);
   if (resolved.kind !== "location") return { ok: false, error: "notABin" };
+
+  const supabase = await createClient();
+
+  const { data: product } = await supabase
+    .from("products")
+    .select("tracking_mode")
+    .eq("id", productId)
+    .maybeSingle();
+
+  // What is really in that bin, read back from the ledger.
+  //
+  // The override path used to drop the lot on the reasoning that a different
+  // bin holds different stock. That is true, and it is exactly why the lot has
+  // to be re-derived rather than discarded: for a lot-tracked product a
+  // lot-less line can never post at all, because the ledger refuses any
+  // movement of a tracked product without one. The operator would have found
+  // that out at posting, having already carried the drum.
+  //
+  // No embedded selects: stock_on_hand is a VIEW and PostgREST cannot infer its
+  // relationships (D-55).
+  const { data: rows } = await supabase
+    .from("stock_on_hand")
+    .select("lot_id, qty")
+    .eq("location_id", resolved.locationId)
+    .eq("product_id", productId)
+    .eq("warehouse_id", user.warehouseId)
+    .gt("qty", 0);
+
+  const lotIds = [...new Set((rows ?? []).map((r) => r.lot_id))].filter(
+    (v): v is string => Boolean(v),
+  );
+
+  const { data: lotRows } = lotIds.length
+    ? await supabase
+        .from("lots")
+        .select("id, lot_no, expiry_date, qc_status")
+        .in("id", lotIds)
+    : { data: [] };
+
+  const lotById = new Map(
+    (
+      (lotRows ?? []) as {
+        id: string;
+        lot_no: string;
+        expiry_date: string | null;
+        qc_status: string;
+      }[]
+    ).map((l) => [l.id, l]),
+  );
+
+  const lots: BinLot[] = (rows ?? [])
+    // A lot that has not passed QC is not offered even as an override: the
+    // posting gate would refuse it (D-14), so proposing it would only produce
+    // a failure later.
+    .filter((r) => !r.lot_id || lotById.get(r.lot_id)?.qc_status === "passed")
+    .map((r) => ({
+      lotId: r.lot_id,
+      lotNo: r.lot_id ? (lotById.get(r.lot_id)?.lot_no ?? null) : null,
+      qty: Number(r.qty),
+      expiryDate: r.lot_id ? (lotById.get(r.lot_id)?.expiry_date ?? null) : null,
+    }))
+    // Earliest expiry first, so a bin holding several lots still presents them
+    // in the order FEFO would want them taken.
+    .sort((a, b) => (a.expiryDate ?? "9999").localeCompare(b.expiryDate ?? "9999"));
 
   return {
     ok: true,
@@ -184,6 +268,8 @@ export async function verifyBinScan(
       code: resolved.code,
       matches: resolved.locationId === expectedLocationId,
       blocksConsumption: resolved.blocksConsumption,
+      lots,
+      trackingMode: (product?.tracking_mode ?? "none") as "none" | "lot" | "serial",
     },
   };
 }

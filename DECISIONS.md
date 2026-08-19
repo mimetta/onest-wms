@@ -1596,3 +1596,82 @@ needs six role hand-offs, because `requisition.approve` and `issue.approve` are 
 manager-only and are separated by staff work that has to happen in between — an issue cannot
 be built until its requisition is approved, and cannot be approved until it has been picked
 and submitted. Those hand-offs are the control working as designed, not friction to remove.
+
+---
+
+## D-57 — Pick suggestions subtract the document's own un-posted lines
+
+*Found on the deployed site during the Phase 1+2 walkthrough, 19 Aug 2026.*
+
+After picking 416.48 kg from a bin onto an issue, `suggest_picks()` offered the same bin again
+for the remaining 83.52. It reads the ledger, and nothing moves until the document posts, so
+the ledger still showed the full quantity sitting there. Following the screen built an issue
+drawing 500 kg from a bin holding 416.48.
+
+The function now takes `p_exclude_doc_type` / `p_exclude_doc_id` and subtracts that document's
+un-posted line quantities per bin and lot.
+
+**Reasoning.** The fix belongs in the function, not the screen. `suggest_picks()` already owns
+the definition of "pickable", and "not already spoken for by the document in front of you" is
+part of the same question — putting it in one of the two callers would have left the other one
+wrong. The join uses `is not distinct from` on `lot_id`, because an untracked product's lot is
+null on both sides and `null = null` would have silently disabled the fix for exactly the
+products with no lot to fall back on. There is a test for that specific case.
+
+**Deliberately NOT done: treating every open document as a reservation.** That would hide real
+stock from a second picker and needs a release policy for abandoned drafts, which is a design
+decision rather than a bug fix. Two pickers racing the same bin are still caught by the
+sufficiency guard at posting (D-13). Scoped to the current document, and a test asserts that a
+*different* document's claims are ignored.
+
+**The ledger was never at risk** — this was a workflow defect, not an integrity one. But the
+picker discovered it after walking the aisle, which is the worst moment.
+
+---
+
+## D-58 — An overridden pick re-derives the lot instead of dropping it
+
+*Found in the same walkthrough, 19 Aug 2026.*
+
+Overriding the suggested bin used to set the line's lot to null, on the reasoning that a
+different bin holds different stock. True — and exactly why the lot has to be **replaced**
+rather than discarded. For a lot-tracked product a lot-less line can never post, so the
+operator learned this after carrying the drum.
+
+`verifyBinScan()` now returns what the scanned bin actually holds of that product, and the
+screen resolves the lot from it:
+
+- one lot in the bin → adopt it silently, but display the batch number being committed to
+- several → ask, because only the person standing there knows which drum they lifted
+- none → refuse the override with "that bin holds none of this product"
+- lots that have not passed QC are not offered at all, since posting would refuse them (D-14)
+
+**Reasoning.** Guessing a lot would put the wrong batch on a recall, which for a chemical
+business is the one record that has to be right. Asking is a tap; being wrong is a
+notifiable incident.
+
+**A detail worth recording, because it surprised me.** Writing the regression test showed the
+lot-less line is refused by the *sufficiency* guard, not the tracking trigger:
+`on_hand_at()` is keyed on the exact (product, lot, serial, bin) tuple, so a missing or wrong
+lot reads as "there is none of that here" and D-13 fires first. Safe either way, and safe
+earlier than expected — but the operator sees "bin holds 0" when the truth is "wrong lot".
+The message deserves improving; the guard does not.
+
+---
+
+## D-59 — Quantities are rounded to the ledger's scale before a human sees them
+
+*19 Aug 2026.*
+
+`500 - 416.48` is `83.51999999999998` in IEEE754, and that is what the picking screen put in
+its quantity box. `numeric(18,4)` would have rounded it on save, so nothing wrong ever reached
+the database.
+
+Rounding to 4 decimal places now happens in `suggest_picks()` and again in the client before
+display and before submit.
+
+**Reasoning.** Cosmetic in its consequences, not in its cost: a warehouse screen showing
+`83.51999999999998` does not look like a system anyone should trust with stock, and trust is
+the thing that decides whether people use it properly or keep a parallel notebook. Rounded in
+both places on purpose — the database value is the one that matters, and the displayed value is
+the one that gets believed.

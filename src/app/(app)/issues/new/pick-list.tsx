@@ -8,10 +8,21 @@ import {
   addLine,
   getSuggestions,
   verifyBinScan,
+  type BinLot,
   type IssueLine,
   type Requirement,
   type Suggestion,
 } from "../actions";
+
+/**
+ * Round to the ledger's own scale.
+ *
+ * 500 - 416.48 is 83.51999999999998 in IEEE754. numeric(18,4) rounds it on
+ * save, but the operator reads it in a quantity box first, and a warehouse
+ * screen showing 83.51999999999998 does not look like a system to trust with
+ * stock.
+ */
+const round4 = (n: number) => Math.round(n * 1e4) / 1e4;
 
 /**
  * Pick one product, guided by suggest_picks().
@@ -50,7 +61,13 @@ export function PickList({
   const [override, setOverride] = useState(false);
   const [qty, setQty] = useState("");
 
-  const outstanding = requirement.qtyRequested - requirement.qtyPicked;
+  // When the operator overrides the suggested bin, the lot has to be re-derived
+  // from what is actually in the bin they scanned. `overrideLots` holds the
+  // candidates; `overrideLot` is the one settled on.
+  const [overrideLots, setOverrideLots] = useState<BinLot[]>([]);
+  const [overrideLot, setOverrideLot] = useState<BinLot | null>(null);
+
+  const outstanding = round4(requirement.qtyRequested - requirement.qtyPicked);
 
   useEffect(() => {
     // Nothing to fetch once the requirement is met — and nothing to clear
@@ -60,7 +77,7 @@ export function PickList({
 
     let cancelled = false;
     void (async () => {
-      const result = await getSuggestions(requirement.productId, outstanding);
+      const result = await getSuggestions(requirement.productId, outstanding, issueId);
       if (cancelled) return;
       if (result.ok) {
         setSuggestions(result.data ?? []);
@@ -77,13 +94,13 @@ export function PickList({
     return () => {
       cancelled = true;
     };
-  }, [requirement.productId, outstanding, t]);
+  }, [requirement.productId, outstanding, issueId, t]);
 
   const handleScan = async (value: string) => {
     if (!active) return;
     setError(null);
 
-    const result = await verifyBinScan(value, active.locationId);
+    const result = await verifyBinScan(value, active.locationId, requirement.productId);
     if (!result.ok) {
       setError(t(result.error));
       return;
@@ -98,8 +115,30 @@ export function PickList({
       return;
     }
 
+    const isOverride = !bin.matches;
+
+    if (isOverride) {
+      // A different bin holds different stock, so the suggested lot no longer
+      // applies and has to be replaced rather than dropped. Dropping it used to
+      // produce a line that could never post, because the ledger refuses any
+      // movement of a tracked product without a lot — a failure the operator
+      // only discovered after carrying the drum.
+      if (bin.lots.length === 0) {
+        setError(t("noneOfThisProductHere", { code: bin.code }));
+        return;
+      }
+
+      setOverrideLots(bin.lots);
+      // One lot in the bin is the ordinary case: adopt it silently. Several,
+      // and only the person standing there can say which drum they lifted.
+      setOverrideLot(bin.lots.length === 1 ? bin.lots[0] : null);
+    } else {
+      setOverrideLots([]);
+      setOverrideLot(null);
+    }
+
     setScannedBin({ id: bin.locationId, code: bin.code });
-    setOverride(!bin.matches);
+    setOverride(isOverride);
   };
 
   const handleAdd = async () => {
@@ -117,18 +156,23 @@ export function PickList({
       return;
     }
 
+    // Several lots of this product in the overridden bin, and none chosen yet.
+    if (override && overrideLots.length > 1 && !overrideLot) {
+      setError(t("chooseLot"));
+      return;
+    }
+
     setBusy(true);
     setError(null);
     const result = await addLine({
       issueId,
       productId: requirement.productId,
       locationId: scannedBin.id,
-      // When the operator overrode the bin, the suggested lot no longer applies
-      // — a different bin holds different stock. The lot is dropped and left to
-      // the posting guard, which reads the ledger at that exact bin.
-      lotId: override ? null : active.lotId,
+      // On an override the lot comes from what is really in the scanned bin,
+      // not from the suggestion that was set aside.
+      lotId: override ? (overrideLot?.lotId ?? null) : active.lotId,
       serialId: override ? null : active.serialId,
-      qty: amount,
+      qty: round4(amount),
       uomId: requirement.baseUomId,
     });
     setBusy(false);
@@ -141,6 +185,8 @@ export function PickList({
     onLineAdded(result.data!, amount);
     setScannedBin(null);
     setOverride(false);
+    setOverrideLots([]);
+    setOverrideLot(null);
     setQty("");
   };
 
@@ -189,6 +235,8 @@ export function PickList({
                       setQty(String(s.qtySuggested));
                       setScannedBin(null);
                       setOverride(false);
+                      setOverrideLots([]);
+                      setOverrideLot(null);
                     }}
                     className={[
                       "flex w-full flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-md border px-3 py-2 text-left",
@@ -241,6 +289,53 @@ export function PickList({
                     suggested: active.locationCode,
                   })}
                 </Banner>
+              )}
+
+              {/* The overridden bin holds more than one lot of this product, so
+                  only the person standing in front of it can say which drum
+                  they lifted. Guessing here would put the wrong batch on a
+                  recall. */}
+              {override && overrideLots.length > 1 && (
+                <div className="flex flex-col gap-1.5">
+                  <SectionLabel>{t("whichLot")}</SectionLabel>
+                  <ul className="flex flex-col gap-1.5">
+                    {overrideLots.map((l) => (
+                      <li key={l.lotId ?? "none"}>
+                        <button
+                          type="button"
+                          onClick={() => setOverrideLot(l)}
+                          className={[
+                            "flex w-full flex-wrap items-baseline gap-x-3 rounded-md border px-3 py-2 text-left",
+                            overrideLot?.lotId === l.lotId
+                              ? "border-brand-brown bg-brand-cream"
+                              : "border-brand-border bg-white",
+                          ].join(" ")}
+                        >
+                          <span className="text-brand-dark font-mono text-sm font-semibold">
+                            {l.lotNo ?? "—"}
+                          </span>
+                          {l.expiryDate && (
+                            <span className="text-warning-text text-xs">
+                              {t("expires", { date: l.expiryDate })}
+                            </span>
+                          )}
+                          <span className="tabular text-brand-dark ml-auto text-sm">
+                            {l.qty.toLocaleString()} {requirement.baseUomCode}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* One lot in the bin: adopted silently, but shown, because the
+                  line is about to record it and the operator should be able to
+                  see the batch number they are committing to. */}
+              {override && overrideLots.length === 1 && overrideLot?.lotNo && (
+                <p className="text-brand-muted text-xs">
+                  {t("lotAdopted", { lot: overrideLot.lotNo })}
+                </p>
               )}
 
               <div className="flex flex-wrap items-end gap-3">

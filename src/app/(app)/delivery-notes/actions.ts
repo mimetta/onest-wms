@@ -87,6 +87,8 @@ export async function setHeader(
 export async function getSuggestions(
   productId: string,
   qty: number,
+  /** The draft being built, so its own un-posted lines are not offered again. */
+  deliveryNoteId: string,
 ): Promise<ActionResult<Suggestion[]>> {
   const user = await requirePerm("delivery_note.create");
   const supabase = await createClient();
@@ -96,6 +98,8 @@ export async function getSuggestions(
     p_qty: qty,
     p_warehouse_id: user.warehouseId,
     p_lot_id: null,
+    p_exclude_doc_type: "delivery_note",
+    p_exclude_doc_id: deliveryNoteId,
   });
 
   if (error) return { ok: false, error: "errorLoad", detail: error.message };

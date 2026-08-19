@@ -729,3 +729,107 @@ describe("document workflow RPCs", () => {
     });
   });
 });
+
+/**
+ * The guarantee the picking screen now relies on.
+ *
+ * The issue screen used to drop the lot when an operator overrode the suggested
+ * bin, producing a line that could never post. The fix re-derives the lot from
+ * what is actually in the scanned bin — but the reason that defect was a
+ * nuisance rather than a disaster is this refusal, so it is asserted directly
+ * instead of being trusted to stay true.
+ *
+ * Which guard fires is worth recording, because it is not the obvious one.
+ * `stock_movements_check_tracking()` would reject a lot-less movement of a
+ * tracked product, but it never gets the chance: on_hand_at() is keyed on the
+ * exact (product, lot, serial, bin) tuple, so a missing or wrong lot reads as
+ * "there is none of that here" and the sufficiency check (D-13) refuses it
+ * first. Safe either way, but the message an operator sees says "bin holds 0"
+ * when the truth is "wrong lot" — worth improving separately.
+ */
+describe("the ledger refuses a mis-tracked line", () => {
+  it("rejects an issue line with no lot for a lot-tracked product", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      const lot = await makeLot(
+        db,
+        w.products.lotTracked,
+        "L-TRK-1",
+        "passed",
+        w.users.qc,
+      );
+
+      await giveStock(db, w, {
+        productId: w.products.lotTracked,
+        locationId: w.locations.picking,
+        qty: 100,
+        lotId: lot,
+        uomId: w.uoms.kg,
+        actor: w.users.staff,
+      });
+
+      await db.setupAs(w.users.admin);
+      const iss = await db.value(
+        `insert into issues (warehouse_id, department_id, status, created_by)
+         values ($1, $2, 'approved', $3) returning id`,
+        [w.wh, w.dept, w.users.admin],
+      );
+      // Deliberately lot-less, which is exactly what the overridden pick used
+      // to produce.
+      await db.query(
+        `insert into issue_lines
+           (header_id, line_no, product_id, qty, uom_id, from_location_id)
+         values ($1, 1, $2, 10, $3, $4)`,
+        [iss, w.products.lotTracked, w.uoms.kg, w.locations.picking],
+      );
+
+      const msg = await db.expectError(() => db.post("issue", iss));
+      // Either guard is an acceptable refusal; asserting only the tracking
+      // message would have made this test fail for the right reason and look
+      // like the wrong one.
+      expect(msg).toMatch(/lot-tracked|insufficient stock/);
+    });
+  });
+
+  it("rejects a lot belonging to a different product", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      // A lot of the solvent, attached to a line for the untracked product.
+      const foreignLot = await makeLot(
+        db,
+        w.products.lotTracked,
+        "L-FOREIGN-1",
+        "passed",
+        w.users.qc,
+      );
+
+      await giveStock(db, w, {
+        productId: w.products.untracked,
+        locationId: w.locations.picking,
+        qty: 50,
+        uomId: w.uoms.pcs,
+        actor: w.users.staff,
+      });
+
+      await db.setupAs(w.users.admin);
+      const iss = await db.value(
+        `insert into issues (warehouse_id, department_id, status, created_by)
+         values ($1, $2, 'approved', $3) returning id`,
+        [w.wh, w.dept, w.users.admin],
+      );
+      await db.query(
+        `insert into issue_lines
+           (header_id, line_no, product_id, lot_id, qty, uom_id, from_location_id)
+         values ($1, 1, $2, $3, 5, $4, $5)`,
+        [iss, w.products.untracked, foreignLot, w.uoms.pcs, w.locations.picking],
+      );
+
+      // Balances attributed to the wrong SKU is the failure mode this prevents,
+      // and it is the one a bin-scan-derived lot could cause if the derivation
+      // ever read the wrong product. Caught as "no such stock at that bin",
+      // because the lot does not match anything held there.
+      const msg = await db.expectError(() => db.post("issue", iss));
+      expect(msg.toLowerCase()).toMatch(/not tracked|does not belong|insufficient stock/);
+    });
+  });
+});
