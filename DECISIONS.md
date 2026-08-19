@@ -1588,6 +1588,11 @@ manager-only. Two tests now assert exactly that, because a single insert into
 `role_permissions` is precisely the kind of change that could quietly widen more than
 intended, and "the transfer test still passes" would not have caught it.
 
-**Consequences.** The staff-driven putaway is now genuinely one step end to end — create,
-approve, post, one person, one walk — and the Phase 2 walkthrough drops from seven role
-sign-ins to five.
+**Consequences.** The staff-driven putaway is now genuinely one step end to end: create,
+approve, post — one person, one walk. That is the whole benefit, and it is an operational one.
+
+It does **not** shorten the approval chain anywhere else. A full Phase 1+2 walkthrough still
+needs six role hand-offs, because `requisition.approve` and `issue.approve` are both
+manager-only and are separated by staff work that has to happen in between — an issue cannot
+be built until its requisition is approved, and cannot be approved until it has been picked
+and submitted. Those hand-offs are the control working as designed, not friction to remove.
