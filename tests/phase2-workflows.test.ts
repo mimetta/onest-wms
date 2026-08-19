@@ -250,10 +250,11 @@ describe("ใบโอนย้าย · transfer", () => {
         ],
       );
 
-      await db.actAs(w.users.manager);
+      // Approved AND posted by the same warehouse user, with no manager in the
+      // loop (D-56). Before that grant this line needed w.users.manager, which
+      // meant a twenty-second walk still waited on a second person — the exact
+      // friction D-44 was supposed to remove.
       await db.query("select approve_document('transfer', $1)", [tr]);
-
-      await db.actAs(w.users.staff);
       const docNo = await db.post("transfer", tr);
 
       // One post, straight to posted. A putaway is a twenty-second walk; it
@@ -302,10 +303,7 @@ describe("ใบโอนย้าย · transfer", () => {
         [tr, w.products.untracked, w.uoms.pcs, w.locations.storage, second.bin],
       );
 
-      await db.actAs(w.users.manager);
       await db.query("select approve_document('transfer', $1)", [tr]);
-
-      await db.actAs(w.users.staff);
       await db.post("transfer", tr); // dispatch
 
       expect(
@@ -490,6 +488,51 @@ describe("the approval chain cannot be skipped", () => {
         ),
       );
       expect(msg).toContain("row-level security");
+    });
+  });
+});
+
+// --------------------------------------------- what D-56 did NOT widen
+
+describe("granting staff transfer.approve stays narrow", () => {
+  it("still refuses them an issue approval", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+      const rq = await requisition(db, w, w.users.staff);
+      await db.actAs(w.users.manager);
+      await db.query("select approve_document('requisition', $1)", [rq]);
+
+      const iss = await issue(db, w, w.users.staff, { requisitionId: rq });
+
+      await db.actAs(w.users.staff);
+      // An issue consumes stock and charges a department. A transfer moves it
+      // between two bins the company owns. Widening the second must not widen
+      // the first, and a single insert into role_permissions is exactly the
+      // kind of change that could quietly do both.
+      const msg = await db.expectError(() =>
+        db.query("select approve_document('issue', $1)", [iss]),
+      );
+      expect(msg).toContain("issue.approve");
+    });
+  });
+
+  it("still refuses them an adjustment approval", async () => {
+    await withRollback(async (db) => {
+      const w = await seedWorld(db);
+
+      await db.actAs(w.users.staff);
+      const adj = await db.value(
+        `insert into adjustments (warehouse_id, reason_code_id, created_by)
+         values ($1, $2, $3) returning id`,
+        [w.wh, w.reasons.disposal, w.users.staff],
+      );
+
+      // A write-off is the one place a single person must not be able to act
+      // alone — the reasoning behind D-39.
+      const msg = await db.expectError(() =>
+        db.query("select approve_document('adjustment', $1)", [adj]),
+      );
+      expect(msg).toContain("adjustment.approve");
     });
   });
 });

@@ -1491,10 +1491,9 @@ show everyone an Approve button and let the RPC reject it, which trains people t
 failure; or quietly grant staff the missing permission, which removes a control the owner set
 deliberately. Adapting the screen keeps both the control and the operator's trust in it.
 
-**Flagged, not decided:** a putaway needs a manager's approval, because `warehouse_staff` does
-not hold `transfer.approve`. That is the configured chain and this build honours it — but it
-means the twenty-second walk D-44 was about still waits on a second person. Worth revisiting
-before go-live; the fix, if wanted, is one row in `role_permissions`, not a migration.
+**Flagged, then decided:** a putaway needed a manager's approval, because `warehouse_staff`
+did not hold `transfer.approve` — so the twenty-second walk D-44 was about still waited on a
+second person. Resolved by D-56.
 
 ---
 
@@ -1561,3 +1560,34 @@ Two things changed:
 error in a string. That is a defect class this project has now hit twice, in the same way, a
 month apart — so it gets a test rather than a third discovery. The same script also asserts
 D-46 holds for a real staff user over the API, which no amount of reading the policy proves.
+
+---
+
+## D-56 — Warehouse staff may approve transfers
+
+*Decided 19 Aug 2026, while preparing the Phase 1+2 walkthrough.*
+
+`warehouse_staff` now holds `transfer.approve`. One row in `role_permissions`, because
+permissions are data (D-20). No function changed and no screen changed: the putaway screen
+already asks `can(user, 'transfer.approve')` and offers "post now" or "submit for approval"
+accordingly (D-52), so it started doing the right thing the moment the row landed.
+
+**Reasoning.** D-44 reduced an internal move to a single post because a putaway is a
+twenty-second walk. Leaving the approval requirement in place undid most of that benefit and
+recreated the failure mode D-44 was about: a control that is too slow for the job gets routed
+around, and the record ends up worse than if the control had never existed.
+
+A transfer differs from every genuinely risky document in one way that matters: it moves stock
+between two bins the company already owns. Nothing enters, leaves, is consumed, or changes
+value, and the ledger records both endpoints either way — so a mistake is visible and
+correctable by another transfer. An unapproved write-off, by contrast, is only visible if
+somebody goes looking.
+
+**What this deliberately did NOT widen:** `issue.approve` and `adjustment.approve` stay
+manager-only. Two tests now assert exactly that, because a single insert into
+`role_permissions` is precisely the kind of change that could quietly widen more than
+intended, and "the transfer test still passes" would not have caught it.
+
+**Consequences.** The staff-driven putaway is now genuinely one step end to end — create,
+approve, post, one person, one walk — and the Phase 2 walkthrough drops from seven role
+sign-ins to five.
