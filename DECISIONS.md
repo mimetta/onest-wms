@@ -1798,3 +1798,65 @@ references its reason, and deleting master data a document points at makes histo
 what it meant. A test asserts the codes exist after migrations alone, that no *active* code lacks
 a direction, and that superseded codes are inactive rather than absent. Other seeded master data
 worth the same question before go-live: UOMs, departments, and location types.
+
+---
+
+## D-64 — The seed-versus-schema audit
+
+*Ran 20 Aug 2026, after D-63 found the adjustment reason codes were seed-only by accident.*
+
+`GO-LIVE.md` D1 requires a fresh Supabase project with migrations applied and **no seed**. So
+every row that lives only in `supabase/seed.sql` is absent from production, and the question for
+each seeded table is not "is it data?" but **"would production be broken without it, rather than
+merely empty?"**
+
+### Moved into migrations
+
+| Table | Why absence breaks something |
+|---|---|
+| `departments` | `requisitions.department_id` and `issues.department_id` are NOT NULL. No departments is not an empty dropdown — it is two screens that cannot create a document at all. |
+| `uoms` | `products.base_uom_id` is NOT NULL. No UOMs means no products, which means no stock, which means nothing. |
+| **system locations** | Receiving refuses a QC-required product with "noQcBin" when no `qc_hold` bin exists; `in_transit_location()` raises for a cross-warehouse transfer; opening balances need the `opening` bin. |
+
+### Already schema — checked, no action
+
+`document_prefixes` (0007 — and `next_doc_no()` would produce `-2026-00001` without it),
+`permissions` and `role_permissions` (0002 plus later additions), `settings` defaults
+(`allow_negative_stock`, `go_live_date`, `near_expiry_horizons`, `slow_mover_days`),
+`alert_rules` (0010), `adjustment_reasons` (0024, D-63).
+
+### Stayed seed — deliberately
+
+`warehouses`, `zones`, `product_categories` (nullable FK), `products`, `product_barcodes`,
+`product_uom_conversions`, `product_stock_rules`, `partners`, `lots`, `serials`, `auth.users`,
+`user_profiles`, and every demo document. Production replaces all of these: the warehouse is the
+customer's, the racks come from D3b, the item master from D2, the users from S3. Their absence
+empties a list; it does not break a path.
+
+### System locations became a function, not rows
+
+A migration cannot insert them — they hang off a warehouse row production creates later. Doing
+it by hand at go-live is possible and is exactly the sort of step that gets half-done, where the
+miss surfaces at the first QC-required receipt rather than at the checklist.
+
+`provision_system_locations(warehouse_id)` creates one of each of the eight system types,
+**idempotent per type**, returning what it created. Called by the seed as a backstop — where it
+creates nothing today, which is the point — so the function runs on every `supabase db reset`
+rather than being a go-live-only path nobody has executed.
+
+**Storage and picking are excluded on purpose.** Those are physical racks that must match the
+building (D3b), and inventing a `STORAGE-WH01` would create somewhere for stock to hide.
+
+**Reasoning for the split.** The type-defaults trigger sets `counts_as_available` and
+`blocks_consumption`, so a provisioned bin behaves identically to a hand-made one — a test
+asserts that, because a provisioned QC bin that failed to block consumption would make unpassed
+stock pickable and would be very hard to notice.
+
+### Flagged, not settled
+
+The **UOM list** moved because absence is fatal, but the eight codes are carried over from demo
+data and have never been confirmed. The AccCloud export may need more, and `decimal_places` is a
+real accounting decision — KG at 3 places versus 0 is the difference between accounting for
+999 g of solvent and losing it. `GO-LIVE.md` D1b now asks for a look before real data lands.
+Unused codes are inert and can be deactivated; a missing one blocks everything, which is why the
+bias was to include.

@@ -87,19 +87,32 @@ cross join (values
   ('OPENING-WH01',    'opening')
 ) as v(code, type);
 
+-- Backstop: any system location type the two blocks above did not cover gets
+-- provisioned here (D-64). Idempotent per type, so the demo's own nicely-named
+-- bins win and this fills only genuine gaps — today it creates nothing, which
+-- is the point. Calling it here also means the function runs on every
+-- `supabase db reset` instead of being a go-live-only path nobody has executed.
+do $$
+declare
+  r record;
+  v_n integer := 0;
+begin
+  for r in
+    select (provision_system_locations(w.id)).* from warehouses w
+  loop
+    v_n := v_n + 1;
+    raise notice 'provisioned missing system location % (%)', r.created_code, r.created_type;
+  end loop;
+  raise notice 'system location backstop created % location(s)', v_n;
+end
+$$;
+
 -- =====================================================================
 -- Units, categories, departments
 -- =====================================================================
 
-insert into uoms (code, name_th, name_en, decimal_places) values
-  ('PCS',  'ชิ้น',      'Pieces',    0),
-  ('KG',   'กิโลกรัม',  'Kilogram',  3),
-  ('L',    'ลิตร',      'Litre',     3),
-  ('DRUM', 'ถัง',       'Drum',      2),
-  ('BAG',  'ถุง',       'Bag',       0),
-  ('BOX',  'กล่อง',     'Box',       0),
-  ('ROLL', 'ม้วน',      'Roll',      0),
-  ('SET',  'ชุด',       'Set',       0);
+-- UOMs are NOT seeded: migration 0025 owns them. products.base_uom_id is NOT
+-- NULL, so without them no product can exist and therefore no stock (D-64).
 
 insert into product_categories (code, name_th, name_en) values
   ('RM-SOLV', 'วัตถุดิบ - ตัวทำละลาย',  'Raw Material - Solvents'),
@@ -110,14 +123,9 @@ insert into product_categories (code, name_th, name_en) values
   ('SPARE',   'อะไหล่',                  'Spare Parts'),
   ('EQUIP',   'เครื่องมือและอุปกรณ์',      'Equipment');
 
-insert into departments (code, name_th, name_en) values
-  ('PROD',   'ฝ่ายผลิต',        'Production'),
-  ('QCQA',   'ฝ่ายควบคุมคุณภาพ', 'QC / QA'),
-  ('WH',     'ฝ่ายคลังสินค้า',   'Warehouse'),
-  ('RETAIL', 'ฝ่ายค้าปลีก',      'Retail'),
-  ('PROC',   'ฝ่ายจัดซื้อ',      'Procurement'),
-  ('ACCT',   'ฝ่ายบัญชี',        'Accounting'),
-  ('MKT',    'ฝ่ายการตลาด',      'Marketing');
+-- Departments are NOT seeded: migration 0025 owns them. Requisitions and issues
+-- both have a NOT NULL department_id, so a fresh production project without
+-- them has two screens that cannot create anything (D-64).
 
 -- =====================================================================
 -- Partners
