@@ -20,7 +20,19 @@ export default async function MasterDataPage() {
     .from("zones")
     .select("id", { count: "exact", head: true });
 
+  const { count: importCount } = await supabase
+    .from("erp_import_batches")
+    .select("id", { count: "exact", head: true })
+    .eq("entity_type", "product")
+    .eq("status", "committed");
+
   const sections = [
+    {
+      href: "/master/import",
+      title: t("import"),
+      hint: t("importHint"),
+      count: importCount ?? 0,
+    },
     {
       href: "/master/products",
       title: t("products"),

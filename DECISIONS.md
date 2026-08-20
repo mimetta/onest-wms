@@ -1860,3 +1860,86 @@ real accounting decision — KG at 3 places versus 0 is the difference between a
 999 g of solvent and losing it. `GO-LIVE.md` D1b now asks for a look before real data lands.
 Unused codes are inert and can be deactivated; a missing one blocks everything, which is why the
 bias was to include.
+
+---
+
+## D-65 — The UOM list, settled against the real export
+
+*20 Aug 2026.*
+
+D-64 moved UOMs into a migration because `products.base_uom_id` is NOT NULL, and flagged the
+eight codes as unreviewed demo carry-over. The export has now been profiled and the owner has
+confirmed the list:
+
+`PCS`(0) `SET`(0) `UNIT`(0) `BOX`(0) `PACK`(0) `GRAM`(1) `CM`(1) `SQM`(2) `KG`(3) `DRUM`(2)
+
+`L`, `BAG` and `ROLL` are **deactivated, not deleted** — a product's `base_uom_id` must stay
+resolvable or its historical quantities stop meaning anything. `DRUM` is kept active despite
+being absent from the export, because raw material arrives in drums and the 200 kg-per-drum
+conversion (D-10) is how receiving turns one scanned drum into a stock quantity.
+
+`decimal_places` is an accounting decision, not a display preference: KG at 3 rather than 0 is
+the difference between accounting for 999 g of solvent and losing it.
+
+`product_categories.code` now carries the AccCloud `รหัสกลุ่มสินค้า`, so the group filter used at
+import time stays visible afterwards rather than being used once and discarded.
+
+---
+
+## D-66 — The AccCloud importer, and what it refuses to do
+
+*Go-live D2, built 20 Aug 2026 against the real 731-row export.*
+
+Three stages that cannot be collapsed: **upload → preview → commit**. The item master is what
+every other record points at, so the one thing this screen must never do is change it as a side
+effect of looking at a file. Raw rows are stored verbatim in `erp_import_rows.raw`, so the
+mapping can be re-run with a different group selection without re-uploading, and a later
+disagreement is settled by reading what the file said rather than what we concluded.
+
+**A real CSV parser, not a line split.** 50 of the 731 rows carry newlines inside quoted fields —
+splitting on newlines yields 807 half-rows and silently corrupts the item master. `papaparse` was
+added for this. That is a departure from D-32's reasoning (a hand-written Code 128 encoder rather
+than a dependency), and the distinction is deliberate: Code 128 is a small spec where we control
+both ends, while CSV is adversarial third-party input whose quoting rules are exactly where
+hand-rolled parsers fail.
+
+### What it decides
+
+| Fact in the file | What the importer does | Why |
+|---|---|---|
+| `รหัสสินค้า` unique, 731/731 | Becomes both `sku` and `acccloud_item_code` | The codes are real, human-readable SKUs (`BAG-KRAFT-GR-15X20`); inventing a second identifier nobody in the building recognises would help nobody |
+| `หน่วย` — nine values | Mapped explicitly; unmapped is an **error**, never a guess | A wrong unit silently changes every quantity that follows. A refused row is visible; a mis-united one is not |
+| `Centimeter` | → `CM` | Their spelling, ours is shorter |
+| `ยกเลิกการจำหน่าย = Y` on 31 rows | Imported **inactive**, not skipped | They may still have stock on a shelf to be counted, issued or written off. Unselectable for new work, still accountable |
+| `QC = N` on all 731 rows | **Ignored entirely** | Importing it would mark every chemical as needing no inspection. QC routing is a WMS decision made per product after import (D-33) |
+| `ต้นทุนมาตรฐาน = 0` on 722 rows | Treated as **absent** | Only nine rows carry a real cost (0.104–125.0). A stored zero reads as "this item is free" to anything valuing stock later — an unpriced item is honest, a zero-priced one is a lie with a decimal point |
+| `ชื่อสินค้า (EN)` blank on 690 | Left **null** | A copy of the Thai name would look like data |
+| 13 groups incl. SVC, FA, TRANS | Tick-list built **from the file**; those three pre-unticked | Which groups are inventory is a question only the business can answer, and the answer differs per export. Excluded rows are counted separately from errors, because they need a different reaction |
+
+### The refusal worth naming
+
+**A base-unit change on a product that already has movements is refused, not applied.** Every
+historical quantity is denominated in the old unit, so switching KG to GRAM would silently
+multiply the ledger by a thousand. The preview reports these as errors with the old and new unit
+named, and the fix is upstream — correct it in AccCloud, or retire the SKU and create a new one.
+
+**On update, only the fields AccCloud owns are touched**: names, category, active flag.
+`requires_qc`, `tracking_mode`, min/max and barcodes are WMS-side decisions, and a re-import must
+not undo them (D-33: AccCloud is master for identity, the WMS for behaviour).
+
+**Errors are never silently dropped.** They stay on the batch, visible, and the preview says so
+before the commit button is pressed.
+
+### Verification
+
+Two test files. The first exercises the pure mapping against the **real export**, not a fixture —
+because the failure modes that matter (a unit spelled differently, a quoted newline, a cost
+column that is 98.8% zeroes) are properties of that file rather than of code. The second applies
+673 mapped rows to the real schema, which is the only way to catch wrong column names; reading
+the migrations had already caught three (`price` not `standard_cost`, `effective_date` not
+`effective_from`, and `products` having no `notes` column).
+
+**A trap the second test walked into**, worth recording: absolute row counts measure the seed as
+much as the import. The seeded database already holds 49 products marked `source='acccloud'`,
+back-filled by migration 0014, so the assertions had to become deltas. An absolute count that
+happens to pass is not evidence.

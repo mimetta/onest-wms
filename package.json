@@ -25,6 +25,7 @@
     "@zxing/library": "^0.23.0",
     "next": "16.3.0",
     "next-intl": "^4.13.5",
+    "papaparse": "^5.6.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "zod": "^4.4.3"
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/papaparse": "^5.5.2",
     "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
